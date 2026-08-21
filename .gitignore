@@ -1,0 +1,21 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE & Editor Settings
+.vscode/
+.idea/
+
+# Local Generated Outputs
+*.docx
+*.png
+index.html
+
+# Environment Files
+.env
