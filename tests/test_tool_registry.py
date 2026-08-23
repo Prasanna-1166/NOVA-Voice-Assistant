@@ -4,9 +4,11 @@ from core.tool_definition import Tool, ToolResult, RiskLevel
 from core.tool_registry import ToolRegistry, initialize_default_registry
 
 
+@patch("subprocess.Popen")
+@patch("os.system")
 class TestToolRegistry(unittest.TestCase):
 
-    def test_tool_registration(self):
+    def test_tool_registration(self, mock_os, mock_popen):
         registry = ToolRegistry()
         dummy_tool = Tool(
             name="test_tool",
@@ -19,7 +21,7 @@ class TestToolRegistry(unittest.TestCase):
         self.assertTrue(registry.exists("test_tool"))
         self.assertEqual(registry.get("test_tool"), dummy_tool)
 
-    def test_duplicate_registration_raises(self):
+    def test_duplicate_registration_raises(self, mock_os, mock_popen):
         registry = ToolRegistry()
         dummy_tool = Tool(
             name="test_tool",
@@ -31,7 +33,7 @@ class TestToolRegistry(unittest.TestCase):
         with self.assertRaises(ValueError):
             registry.register(dummy_tool)
 
-    def test_tool_execution_success(self):
+    def test_tool_execution_success(self, mock_os, mock_popen):
         registry = ToolRegistry()
         dummy_tool = Tool(
             name="add_numbers",
@@ -45,14 +47,13 @@ class TestToolRegistry(unittest.TestCase):
         self.assertEqual(res.output, 15)
         self.assertIsNone(res.error)
 
-    def test_unknown_tool_execution(self):
+    def test_unknown_tool_execution(self, mock_os, mock_popen):
         registry = ToolRegistry()
         res = registry.execute("non_existent_tool")
         self.assertFalse(res.success)
         self.assertIn("Unknown tool", res.error)
 
-    @patch("core.tools.SystemTools.open_app")
-    def test_default_registry_initialization(self, mock_open_app):
+    def test_default_registry_initialization(self, mock_os, mock_popen):
         registry = initialize_default_registry()
         tools = ["open_application", "set_volume", "mute_audio", "take_screenshot", "create_reminder"]
         for t in tools:

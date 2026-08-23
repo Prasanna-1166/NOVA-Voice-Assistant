@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from core.llm_intent_router import LLMIntentRouter
 from core.intent_router import InputSource
 from core.tool_registry import initialize_default_registry

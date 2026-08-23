@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from core.intent_router import IntentRouter, InputSource, TaskRequest
 from core.tool_registry import initialize_default_registry
 
@@ -52,12 +53,13 @@ class TestIntentRouter(unittest.TestCase):
         self.assertFalse(res.success)
         self.assertIn("UNSUPPORTED", res.error)
 
-    def test_router_execution_boundary_with_registry(self):
+    @patch("os.system")
+    def test_router_execution_boundary_with_registry(self, mock_os_system):
         res = self.router.route("open vscode")
         self.assertTrue(res.success)
-        # Verify tool registry executes TaskRequest cleanly
         tool_res = self.registry.execute(res.task_request.intent, **res.task_request.parameters)
         self.assertTrue(tool_res.success)
+        mock_os_system.assert_called_once_with("start code")
 
 
 if __name__ == "__main__":

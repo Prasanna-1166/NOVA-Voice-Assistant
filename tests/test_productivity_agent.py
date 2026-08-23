@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from core.agent import AgentResult
 from core.productivity_agent import ProductivityAgent
 from core.intent_router import TaskRequest, InputSource
@@ -9,7 +9,8 @@ from core.tool_registry import ToolRegistry
 
 class TestProductivityAgent(unittest.TestCase):
 
-    def setUp(self):
+    @patch("core.tools.SystemTools.open_app")
+    def setUp(self, mock_open_app):
         self.mock_registry = MagicMock(spec=ToolRegistry)
         self.agent = ProductivityAgent(registry=self.mock_registry)
 
