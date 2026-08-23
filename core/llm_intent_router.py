@@ -25,13 +25,24 @@ Software Engineering & Coding Tasks:
 10. "code_conversion" -> parameters: {"query": "<string>"}
 11. "programming_guidance" -> parameters: {"query": "<string>"}
 
+Document Generation Capabilities:
+12. "report_generation" -> parameters: {"topic": "<string>"}
+13. "assignment_generation" -> parameters: {"topic": "<string>"}
+14. "note_generation" -> parameters: {"topic": "<string>"}
+15. "project_documentation" -> parameters: {"topic": "<string>"}
+16. "letter_generation" -> parameters: {"topic": "<string>"}
+17. "resume_generation" -> parameters: {"topic": "<string>"}
+18. "quiz_generation" -> parameters: {"topic": "<string>"}
+19. "readme_generation" -> parameters: {"topic": "<string>"}
+20. "document_generation" -> parameters: {"topic": "<string>"}
+
 Rules:
 - Respond strictly with a single valid JSON object.
 - Never output Markdown code blocks, explanations, or text outside the JSON object.
 - If the request is a general non-technical/conversational question, return: {"intent": "unknown", "parameters": {}}
 
 Example Output:
-{"intent": "code_generation", "parameters": {"query": "Write Python binary search"}}
+{"intent": "report_generation", "parameters": {"topic": "Artificial Intelligence in Healthcare"}}
 """
 
 
@@ -70,16 +81,15 @@ class LLMIntentRouter:
         if not intent or intent == "unknown":
             return RoutingResult(success=False, error="UNSUPPORTED: Query outside supported intents.")
 
-        coding_intents = [
-            "code_generation",
-            "code_explanation",
-            "debugging",
-            "algorithm_help",
-            "code_conversion",
-            "programming_guidance",
+        non_tool_intents = [
+            "code_generation", "code_explanation", "debugging", "algorithm_help",
+            "code_conversion", "programming_guidance", "document_generation",
+            "report_generation", "assignment_generation", "note_generation",
+            "project_documentation", "letter_generation", "resume_generation",
+            "quiz_generation", "readme_generation"
         ]
 
-        if intent not in coding_intents and not self.registry.exists(intent):
+        if intent not in non_tool_intents and not self.registry.exists(intent):
             return RoutingResult(success=False, error=f"REJECTED: Intent '{intent}' is not supported.")
 
         if intent == "open_application":
@@ -97,8 +107,13 @@ class LLMIntentRouter:
             if not isinstance(params.get("mute"), bool):
                 return RoutingResult(success=False, error="INVALID_PARAMS: mute must be boolean.")
 
-        elif intent in coding_intents:
-            params["query"] = params.get("query", user_input)
+        elif intent in non_tool_intents:
+            if "topic" in params:
+                params["topic"] = params.get("topic") or user_input
+            elif "query" in params:
+                params["query"] = params.get("query") or user_input
+            else:
+                params["topic"] = user_input
 
         return RoutingResult(
             success=True,

@@ -2,6 +2,7 @@ import unittest
 from core.agent_registry import AgentRegistry, initialize_default_agent_registry
 from core.productivity_agent import ProductivityAgent
 from core.coding_agent import CodingAgent
+from core.document_agent import DocumentAgent
 from core.intent_router import TaskRequest, InputSource
 
 
@@ -11,6 +12,7 @@ class TestAgentRegistry(unittest.TestCase):
         self.registry = AgentRegistry()
         self.prod_agent = ProductivityAgent()
         self.coding_agent = CodingAgent()
+        self.doc_agent = DocumentAgent()
 
     def test_register_and_retrieve_agent(self):
         self.registry.register(self.prod_agent)
@@ -24,25 +26,28 @@ class TestAgentRegistry(unittest.TestCase):
     def test_list_agents(self):
         self.registry.register(self.prod_agent)
         self.registry.register(self.coding_agent)
+        self.registry.register(self.doc_agent)
         agents_list = self.registry.list_agents()
-        self.assertEqual(len(agents_list), 2)
+        self.assertEqual(len(agents_list), 3)
 
-    def test_find_capable_agents_coding(self):
+    def test_find_capable_agents_document(self):
         self.registry.register(self.prod_agent)
         self.registry.register(self.coding_agent)
+        self.registry.register(self.doc_agent)
         task = TaskRequest(
-            intent="code_generation",
-            parameters={},
+            intent="report_generation",
+            parameters={"topic": "AI in Healthcare"},
             source=InputSource.TEXT,
         )
         capable = self.registry.find_capable_agents(task)
         self.assertEqual(len(capable), 1)
-        self.assertEqual(capable[0].name, "CodingAgent")
+        self.assertEqual(capable[0].name, "DocumentAgent")
 
     def test_default_agent_registry_initialization(self):
         default_reg = initialize_default_agent_registry()
         self.assertTrue(default_reg.exists("ProductivityAgent"))
         self.assertTrue(default_reg.exists("CodingAgent"))
+        self.assertTrue(default_reg.exists("DocumentAgent"))
 
 
 if __name__ == "__main__":

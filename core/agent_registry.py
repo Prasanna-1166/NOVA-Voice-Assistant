@@ -3,9 +3,9 @@ from core.agent import Agent
 from core.intent_router import TaskRequest
 from core.productivity_agent import ProductivityAgent
 from core.coding_agent import CodingAgent
+from core.document_agent import DocumentAgent
 
 
-# Centralized mapping between Tool Intents and Agent Capabilities
 INTENT_TO_CAPABILITY_MAP: Dict[str, str] = {
     # System Productivity
     "open_application": "app_management",
@@ -20,14 +20,20 @@ INTENT_TO_CAPABILITY_MAP: Dict[str, str] = {
     "algorithm_help": "algorithm_help",
     "code_conversion": "code_conversion",
     "programming_guidance": "programming_guidance",
+    # Document Generation
+    "document_generation": "document_generation",
+    "report_generation": "report_generation",
+    "assignment_generation": "assignment_generation",
+    "note_generation": "note_generation",
+    "project_documentation": "project_documentation",
+    "letter_generation": "letter_generation",
+    "resume_generation": "resume_generation",
+    "quiz_generation": "quiz_generation",
+    "readme_generation": "readme_generation",
 }
 
 
 class AgentRegistry:
-    """
-    Centralized registry managing specialized agent instances and performing
-    deterministic capability matching for TaskRequest routing.
-    """
 
     def __init__(self):
         self._agents: Dict[str, Agent] = {}
@@ -70,6 +76,7 @@ def initialize_default_agent_registry() -> AgentRegistry:
     registry = AgentRegistry()
     registry.register(ProductivityAgent())
     registry.register(CodingAgent())
+    registry.register(DocumentAgent())
     return registry
 
 
