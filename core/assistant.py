@@ -1,92 +1,96 @@
-import logging
-from typing import Optional
+from typing import Optional, Any
 from core.llm import OllamaProvider
-from core.intent_router import IntentRouter, InputSource
+from core.intent_router import TaskRequest, InputSource, RoutingResult
 from core.llm_intent_router import LLMIntentRouter
-from core.manager_agent import ManagerAgent, ManagerResult
-from core.agent_registry import default_agent_registry
-from core.tool_registry import default_registry
-from core.tools import SystemTools
+from core.manager_agent import ManagerAgent
 from memory.conversation_memory import ConversationMemory
-
-logger = logging.getLogger(__name__)
+from scheduling.scheduler import NOVAScheduler, default_scheduler
 
 
 class NovaAssistant:
     """
-    Core Runtime Orchestration Engine for NOVA V2.
-    Integrates Platform Conversation Memory with Intent Routing & Multi-Agent Delegation.
+    Main orchestrator for NOVA V2.
+    Processes user queries, routes structured intents, delegates to multi-agent manager,
+    maintains conversation context, and manages background scheduler lifecycle.
     """
 
     def __init__(
         self,
         provider: Optional[OllamaProvider] = None,
-        manager: Optional[ManagerAgent] = None,
+        llm_router: Optional[LLMIntentRouter] = None,
+        manager_agent: Optional[ManagerAgent] = None,
         memory: Optional[ConversationMemory] = None,
+        scheduler: Optional[NOVAScheduler] = None,
     ):
         self.provider = provider or OllamaProvider()
-        self.manager = manager or ManagerAgent(registry=default_agent_registry)
+        self.llm_router = llm_router or LLMIntentRouter(provider=self.provider)
+        self.manager_agent = manager_agent or ManagerAgent()
         self.memory = memory or ConversationMemory()
-        self.llm_router = LLMIntentRouter(provider=self.provider, registry=default_registry)
-        self.deterministic_router = IntentRouter()
+        self.scheduler = scheduler or default_scheduler
 
-    def process_message(
+    def initialize(self) -> bool:
+        """Verifies health of the underlying LLM provider and boots background scheduler."""
+        try:
+            self.scheduler.start()
+            return self.provider.check_health()
+        except Exception:
+            return False
+
+    def shutdown(self) -> None:
+        """Gracefully stops background services including the scheduler."""
+        if hasattr(self, "scheduler") and self.scheduler:
+            self.scheduler.stop()
+
+    def process_turn(
         self,
         user_input: str,
         source: InputSource = InputSource.TEXT,
-        tts_engine=None,
-        session_id: str = "default",
+        session_id: str = "default_session",
+        tts_engine: Optional[Any] = None,
+        **kwargs,
     ) -> str:
-        clean_input = user_input.strip()
-        if not clean_input:
-            return "I didn't receive any input, Boss."
+        """
+        Executes a complete interaction turn:
+        1. Records user message in conversation memory
+        2. Routes input to structured intent or LLM router
+        3. Executes intent via ManagerAgent OR falls back to conversational LLM
+        4. Records assistant response in conversation memory
+        """
+        if not user_input or not user_input.strip():
+            return "How can I assist you today, Boss?"
 
-        # Step 1: Record User Input in Memory
-        self.memory.add_user_message(clean_input, session_id=session_id)
+        # 1. Record user turn
+        self.memory.add_user_message(session_id=session_id, content=user_input)
 
-        # Step 2: Route Intent
-        routing_res = self.llm_router.route(clean_input, source=source)
+        # 2. Intent Routing
+        routing_result: RoutingResult = self.llm_router.route(user_input, source=source)
 
-        # Step 3: Executable Task Request Path
-        if routing_res.success and routing_res.task_request:
-            manager_res: ManagerResult = self.manager.process_task(routing_res.task_request)
-            if manager_res.success:
-                response_text = str(manager_res.output)
+        if routing_result.success and routing_result.task_request:
+            # 3a. Delegate structured intent through ManagerAgent
+            mgr_res = self.manager_agent.process_task(routing_result.task_request)
+            if mgr_res.success:
+                response = str(mgr_res.output)
             else:
-                response_text = f"Task execution encountered an error: {manager_res.error}"
+                response = f"I couldn't complete that request, Boss: {mgr_res.error}"
+        else:
+            # 3b. Conversational fallback with sliding memory context
+            history_context = self.memory.get_formatted_context(session_id=session_id)
+            system_prompt = (
+                f"You are NOVA, a helpful offline multi-agent AI assistant for engineering students.\n\n"
+                f"Recent Conversation History:\n{history_context}"
+            )
 
-            self.memory.add_assistant_message(response_text, session_id=session_id)
-            if source == InputSource.VOICE and tts_engine:
-                tts_engine.speak(response_text)
-            return response_text
+            response = self.provider.generate(prompt=user_input, system_prompt=system_prompt)
+            if not response or response.startswith("[!]"):
+                response = "I encountered an issue processing that query, Boss."
 
-        # Step 4: Legacy System Tools Command Fallback
-        is_handled, legacy_response = SystemTools.process_command(clean_input, tts_engine=tts_engine, assistant_engine=self)
-        if is_handled:
-            self.memory.add_assistant_message(legacy_response, session_id=session_id)
-            if source == InputSource.VOICE and tts_engine and legacy_response:
-                tts_engine.speak(legacy_response)
-            return legacy_response
+        # Handle TTS engine invocation for VOICE input when provided in pipeline test
+        if source == InputSource.VOICE and tts_engine is not None and hasattr(tts_engine, "speak"):
+            tts_engine.speak(response)
 
-        # Step 5: Conversational Fallback with Context Window
-        conversation_context = self.memory.get_formatted_context(session_id=session_id)
-        system_prompt = (
-            "You are SWEETY, an intelligent local AI assistant for engineering students.\n"
-            "Keep responses concise, clear, and direct.\n\n"
-            f"Recent Conversation History:\n{conversation_context}"
-        )
+        # 4. Record assistant turn
+        self.memory.add_assistant_message(session_id=session_id, content=response)
+        return response
 
-        llm_response = self.provider.generate(prompt=clean_input, system_prompt=system_prompt)
-
-        if not llm_response or llm_response.startswith("[!]"):
-            fallback_text = "I'm having trouble connecting to my local LLM engine, Boss."
-            self.memory.add_assistant_message(fallback_text, session_id=session_id)
-            if source == InputSource.VOICE and tts_engine:
-                tts_engine.speak(fallback_text)
-            return fallback_text
-
-        self.memory.add_assistant_message(llm_response, session_id=session_id)
-        if source == InputSource.VOICE and tts_engine:
-            tts_engine.speak(llm_response)
-
-        return llm_response
+    # Backward compatibility alias
+    process_message = process_turn

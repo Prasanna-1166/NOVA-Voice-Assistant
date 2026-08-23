@@ -1,64 +1,62 @@
-import requests
-from abc import ABC, abstractmethod
+import json
+import urllib.request
+import urllib.error
 from typing import Optional
-from core.config import OLLAMA_BASE_URL, DEFAULT_MODEL_NAME, OLLAMA_REQUEST_TIMEOUT
 
 
-class ModelProvider(ABC):
-    """Abstract Base Class for LLM Providers."""
+class OllamaProvider:
+    """
+    Local LLM provider abstraction wrapping Ollama API.
+    Communicates via local REST endpoints (default: http://localhost:11434).
+    """
 
-    def __init__(self, model_name: str = DEFAULT_MODEL_NAME, base_url: str = OLLAMA_BASE_URL):
-        self.model_name = model_name
-        self.base_url = base_url
+    def __init__(self, base_url: str = "http://localhost:11434", model: str = "qwen2.5:3b"):
+        self.base_url = base_url.rstrip("/")
+        self.model = model
 
-    @abstractmethod
-    def initialize(self) -> bool:
-        """Check if provider and target model are available."""
-        pass
+    def check_health(self) -> bool:
+        """
+        Verifies that Ollama server is running and accessible locally.
+        Checks both root / and /api/tags endpoints.
+        """
+        for endpoint in ["/", "/api/tags"]:
+            try:
+                req = urllib.request.Request(f"{self.base_url}{endpoint}", method="GET")
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    if resp.status == 200:
+                        return True
+            except Exception:
+                continue
+        return False
 
-    @abstractmethod
-    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
-        """Generate text response from the model."""
-        pass
-
-
-class OllamaProvider(ModelProvider):
-    """Concrete implementation for local Ollama API."""
-
-    def __init__(self, model_name: str = DEFAULT_MODEL_NAME, base_url: str = OLLAMA_BASE_URL):
-        super().__init__(model_name=model_name, base_url=base_url)
-
-    def initialize(self) -> bool:
-        try:
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
-            if response.status_code == 200:
-                models = response.json().get("models", [])
-                installed_names = [m.get("name") for m in models]
-                return any(self.model_name in name for name in installed_names) or True
-            return False
-        except requests.exceptions.RequestException:
-            return False
-
-    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+    def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """
+        Sends generation payload to Ollama /api/generate endpoint.
+        """
         url = f"{self.base_url}/api/generate"
         payload = {
-            "model": self.model_name,
+            "model": self.model,
             "prompt": prompt,
-            "stream": False
+            "stream": False,
         }
         if system_prompt:
             payload["system"] = system_prompt
 
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
         try:
-            response = requests.post(url, json=payload, timeout=OLLAMA_REQUEST_TIMEOUT)
-            if response.status_code == 200:
-                return response.json().get("response", "").strip()
-            return f"[!] Ollama returned HTTP error code {response.status_code}."
-        except requests.exceptions.Timeout:
-            return "[!] Generation timed out."
-        except requests.exceptions.RequestException as e:
-            return f"[!] Error communicating with local Ollama service: {str(e)}"
-
-
-# Backward compatibility alias
-OllamaLLM = OllamaProvider
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                if resp.status == 200:
+                    result = json.loads(resp.read().decode("utf-8"))
+                    return result.get("response", "").strip()
+                return f"[!] Ollama returned HTTP status {resp.status}"
+        except urllib.error.URLError as e:
+            return f"[!] Failed to connect to Ollama: {e.reason}"
+        except Exception as e:
+            return f"[!] LLM Generation Error: {str(e)}"

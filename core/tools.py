@@ -1,344 +1,180 @@
 import os
-import re
 import time
-import datetime
-import threading
-import webbrowser
-import urllib.parse
-import mss
-from comtypes import CLSCTX_ALL
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+from typing import Optional, Any
+from productivity.task_store import default_task_store, TaskStore
+from productivity.preference_store import default_preference_store, PreferenceStore
+from scheduling.reminder_store import default_reminder_store, ReminderStore
+
 
 class SystemTools:
-    # --- CONTACT BOOK ---
-    CONTACTS = {
-        "mom": "+919876543210",
-        "dad": "+919876543211",
-        "alex": "+919876543212",
-        "bimbo": "+917993328366"
-    }
 
-    DEFAULT_COUNTRY_CODE = "+91"
-
-    # --- HELPER: RESOLVE RECIPIENT TO PHONE NUMBER ---
-    @classmethod
-    def _resolve_number(cls, recipient: str) -> str:
-        clean_name = recipient.lower().strip()
-        if clean_name in cls.CONTACTS:
-            return cls.CONTACTS[clean_name]
-        
-        digits = re.sub(r'\D', '', recipient)
-        if len(digits) == 10:
-            return f"{cls.DEFAULT_COUNTRY_CODE}{digits}"
-        elif len(digits) > 10:
-            return f"+{digits}"
-        return None
-
-    # --- QUICK RELATIVE TIMERS & REMINDERS ---
+    # --- Productivity Tools ---
     @staticmethod
-    def set_relative_timer(user_text: str, tts_engine=None) -> str:
-        try:
-            numbers = re.findall(r'\d+', user_text)
-            if not numbers:
-                return "Please specify a time duration in minutes, seconds, or hours, Boss."
-            
-            duration = int(numbers[0])
-            seconds = duration
-            
-            if "minute" in user_text:
-                seconds = duration * 60
-            elif "hour" in user_text:
-                seconds = duration * 3600
+    def open_application(app_name: str) -> str:
+        app_map = {
+            "vscode": "code",
+            "vs code": "code",
+            "chrome": "chrome",
+            "notepad": "notepad",
+            "calculator": "calc",
+        }
+        cmd = app_map.get(app_name.lower(), app_name)
+        os.system(f"start {cmd}")
+        return f"Opening {app_name}, Boss."
 
-            # Extract task description
-            clean_text = user_text.lower().replace("remind me", "").replace("in ", "").replace("after ", "")
-            clean_text = re.sub(r'\d+\s*(minute|second|hour)s?', '', clean_text).replace("to ", "").strip()
-            
-            reminder_msg = clean_text if clean_text else "resume your task"
+    # Legacy alias for older unit tests
+    open_app = open_application
 
-            def alert_user():
-                msg = f"Reminder Boss: Time to {reminder_msg}."
-                print(f"\n[⏰ REMINDER ALERT]: {msg}\n")
-                if tts_engine:
-                    tts_engine.speak(msg)
-
-            # Fire non-blocking background thread
-            timer_thread = threading.Timer(seconds, alert_user)
-            timer_thread.daemon = True
-            timer_thread.start()
-
-            unit = "minute" if "minute" in user_text else ("hour" if "hour" in user_text else "second")
-            if duration > 1:
-                unit += "s"
-
-            return f"Timer set for {duration} {unit}. I will alert you out loud when time is up, Boss."
-
-        except Exception as e:
-            return f"Failed to set reminder timer, Boss: {e}"
-
-    # --- WHATSAPP DESKTOP MESSAGING ---
-    @classmethod
-    def send_whatsapp_message(cls, recipient: str, message: str) -> str:
-        try:
-            import pyautogui
-            import subprocess
-
-            phone_number = cls._resolve_number(recipient)
-            if not phone_number:
-                return f"Invalid phone number or contact '{recipient}', Boss."
-
-            clean_number = phone_number.replace("+", "").replace(" ", "").replace("-", "")
-            encoded_message = urllib.parse.quote(message)
-            
-            desktop_cmd = f'start whatsapp://send?phone={clean_number}^&text={encoded_message}'
-            subprocess.run(["cmd", "/c", desktop_cmd], shell=True)
-            
-            time.sleep(4)
-            
-            screen_width, screen_height = pyautogui.size()
-            pyautogui.click(screen_width // 2, screen_height // 2)
-            time.sleep(0.5)
-            
-            pyautogui.press("enter")
-            
-            contact_display = recipient.capitalize() if recipient in cls.CONTACTS else phone_number
-            return f"WhatsApp message sent to {contact_display}, Boss."
-        except Exception as e:
-            return f"Failed to send WhatsApp message, Boss: {e}"
-
-    # --- YOUTUBE AUTOMATION ---
-    @staticmethod
-    def play_youtube_song(user_text: str) -> str:
-        try:
-            import pywhatkit
-            # Clean sentence-level filler without altering words like 'songs' or 'playlist'
-            clean_query = re.sub(r'^(open youtube and|play a song|play songs|play song|play)\s*', '', user_text, flags=re.IGNORECASE)
-            clean_query = re.sub(r'\s*(on youtube|from youtube)$', '', clean_query, flags=re.IGNORECASE).strip()
-            
-            if not clean_query:
-                clean_query = "trending music"
-                
-            pywhatkit.playonyt(clean_query)
-            return f"Playing '{clean_query}' on YouTube, Boss."
-        except Exception as e:
-            return f"Failed to play on YouTube, Boss: {e}"
-
-    # --- AUDIO & VOLUME CONTROL ---
     @staticmethod
     def set_volume(level: int) -> str:
-        try:
-            level = max(0, min(100, level))
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-            volume = interface.QueryInterface(IAudioEndpointVolume)
-            volume.SetMasterVolumeLevelScalar(level / 100.0, None)
-            return f"Volume set to {level} percent, Boss."
-        except Exception as e:
-            return f"Failed to set volume, Boss: {e}"
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        from comtypes import CLSCTX_ALL
+
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        volume = interface.QueryInterface(IAudioEndpointVolume)
+        volume.SetMasterVolumeLevelScalar(level / 100.0, None)
+        return f"Volume set to {level} percent, Boss."
 
     @staticmethod
     def mute_audio(mute: bool = True) -> str:
-        try:
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-            volume = interface.QueryInterface(IAudioEndpointVolume)
-            volume.SetMute(int(mute), None)
-            status = "muted" if mute else "unmuted"
-            return f"Audio {status}, Boss."
-        except Exception as e:
-            return f"Failed to toggle mute, Boss: {e}"
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        from comtypes import CLSCTX_ALL
 
-    # --- SCREENSHOT MANAGEMENT ---
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        volume = interface.QueryInterface(IAudioEndpointVolume)
+        volume.SetMute(int(mute), None)
+        state = "muted" if mute else "unmuted"
+        return f"Audio {state}, Boss."
+
     @staticmethod
     def take_screenshot() -> str:
-        try:
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"screenshot_{timestamp}.png"
-            target_dir = os.path.join(os.path.expanduser("~"), "Pictures", "Screenshots")
-            os.makedirs(target_dir, exist_ok=True)
-            
-            filepath = os.path.join(target_dir, filename)
-            with mss.mss() as sct:
-                sct.shot(output=filepath)
+        import mss
+        from pathlib import Path
 
-            return "Screenshot saved to your Screenshots folder, Boss."
-        except Exception as e:
-            return f"Failed to capture screenshot, Boss: {e}"
+        save_dir = Path.home() / "Pictures" / "NOVA_Screenshots"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        filename = save_dir / f"screenshot_{int(time.time())}.png"
 
-    # --- UNIVERSAL MICROSOFT WORD DOCUMENT GENERATOR ---
+        with mss.mss() as sct:
+            sct.shot(output=str(filename))
+        return f"Screenshot saved to {filename}, Boss."
+
     @staticmethod
-    def create_word_document(user_text: str, assistant_engine=None) -> str:
-        try:
-            import docx
-            from docx.shared import Pt, Inches
+    def process_command(command: str, tts_engine=None, assistant_engine=None):
+        return False, ""
 
-            # 1. Determine Target Save Directory from User Command
-            user_low = user_text.lower()
-            home_dir = os.path.expanduser("~")
-            
-            if "on desktop" in user_low or "to desktop" in user_low or "in desktop" in user_low:
-                target_dir = os.path.join(home_dir, "Desktop")
-            elif "in downloads" in user_low or "to downloads" in user_low:
-                target_dir = os.path.join(home_dir, "Downloads")
-            else:
-                path_match = re.search(r'in\s+([a-zA-Z]:\\[^\s]+)', user_text)
-                if path_match:
-                    target_dir = path_match.group(1)
-                else:
-                    target_dir = os.path.join(home_dir, "Documents")
-
-            os.makedirs(target_dir, exist_ok=True)
-
-            # 2. Generate Content using Local LLM Engine
-            # Inside create_word_document in core/tools.py:
-            if assistant_engine:
-                prompt = (
-                    f"You are a professional document writer. Generate the FULL, COMPLETE content for this request: '{user_text}'.\n"
-                    f"Requirements:\n"
-                    f"- Write out all paragraphs, details, dates, and placeholders completely.\n"
-                    f"- Do NOT summarize or use shortcuts.\n"
-                    f"- Output ONLY the body text of the document. Do not include any intro like 'Here is your letter' or extra commentary."
-                )
-                generated_text = assistant_engine.process_message(prompt)
-                clean_text = re.sub(r'```.*?\n|```', '', generated_text).strip()
-                
-                
-            else:
-                clean_text = f"Document content for request:\n\n{user_text}"
-
-            # 3. Create and Format Word Document (.docx)
-            doc = docx.Document()
-            
-            for section in doc.sections:
-                section.top_margin = Inches(1)
-                section.bottom_margin = Inches(1)
-                section.left_margin = Inches(1)
-                section.right_margin = Inches(1)
-
-            for line in clean_text.split('\n'):
-                line_str = line.strip()
-                if not line_str:
-                    continue
-                
-                if line_str.isupper() and len(line_str) < 50:
-                    p = doc.add_paragraph()
-                    run = p.add_run(line_str)
-                    run.font.name = 'Calibri'
-                    run.font.size = Pt(14)
-                    run.bold = True
-                else:
-                    p = doc.add_paragraph()
-                    run = p.add_run(line_str)
-                    run.font.name = 'Calibri'
-                    run.font.size = Pt(11)
-
-            # 4. Generate Safe Filename & Save
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"NOVA_Doc_{timestamp}.docx"
-            filepath = os.path.join(target_dir, filename)
-            doc.save(filepath)
-
-            # 5. Open File directly in Microsoft Word
-            os.system(f'start winword "{filepath}"')
-
-            folder_name = os.path.basename(target_dir) if os.path.basename(target_dir) else target_dir
-            return f"Generated document saved to {folder_name} and opened in Microsoft Word, Boss."
-
-        except Exception as e:
-            return f"Failed to generate Word document, Boss: {e}"
-
-    # --- WORKSPACE & APPLICATION CONTROL ---
+    # --- Phase 11 Task Tools ---
     @staticmethod
-    def open_app(app_name: str) -> str:
-        name_lower = app_name.lower()
+    def create_task(title: str, description: str = "", priority: str = "MEDIUM", store: Optional[TaskStore] = None) -> str:
+        t_store = store or default_task_store
+        task = t_store.create_task(title=title, description=description, priority=priority)
+        return f"Added '{task.title}' (Priority: {task.priority.value}) to your tasks, Boss."
 
-        if "opencode" in name_lower:
-            opencode_path = r"C:\Users\Prasanna Kumar\AppData\Local\Programs\opencode\OpenCode.exe"
-            if os.path.exists(opencode_path):
-                os.startfile(opencode_path)
-            else:
-                os.system("start opencode")
-            return "Opening OpenCode Application, Boss."
+    @staticmethod
+    def list_tasks(status: str = "PENDING", store: Optional[TaskStore] = None) -> str:
+        t_store = store or default_task_store
+        tasks = t_store.list_tasks(status=status)
+        if not tasks:
+            return f"You have no {status.lower()} tasks, Boss."
 
-        app_map = [
-            ("vs code", "code"),
-            ("vscode", "code"),
-            ("code", "code"),
-            ("chrome", "chrome"),
-            ("notepad", "notepad"),
-            ("calculator", "calc"),
-            ("cmd", "start cmd"),
-            ("terminal", "start wt"),
-            ("explorer", "explorer"),
-            ("whatsapp", "whatsapp:")
-        ]
-        
-        for key, command in app_map:
-            if key in name_lower:
-                os.system(f"start {command}")
-                return f"Opening {key.capitalize()}, Boss."
-        return f"Could not locate application mapping for '{app_name}', Boss."
+        items = [f"- [{t.id}] {t.title} (Priority: {t.priority.value})" for t in tasks]
+        return f"Your {status.lower()} tasks:\n" + "\n".join(items)
 
-    # --- COMMAND ROUTER ---
-    @classmethod
-    def process_command(cls, user_text: str, tts_engine=None, assistant_engine=None):
-        text = user_text.lower().strip()
+    @staticmethod
+    def complete_task(task_identifier: str, store: Optional[TaskStore] = None) -> str:
+        t_store = store or default_task_store
+        task = t_store.complete_task(task_identifier)
+        if not task:
+            return f"Task '{task_identifier}' was not found, Boss."
+        return f"Marked '{task.title}' as completed, Boss."
 
-        # 1. QUICK RELATIVE REMINDERS & TIMERS
-        if "remind me" in text and ("after" in text or "in" in text or "minute" in text or "second" in text or "hour" in text):
-            response = cls.set_relative_timer(user_text, tts_engine)
-            return True, response
+    @staticmethod
+    def update_task(
+        task_identifier: str,
+        title: Optional[str] = None,
+        priority: Optional[str] = None,
+        status: Optional[str] = None,
+        store: Optional[TaskStore] = None,
+    ) -> str:
+        t_store = store or default_task_store
+        task = t_store.update_task(task_identifier, title=title, priority=priority, status=status)
+        if not task:
+            return f"Task '{task_identifier}' was not found, Boss."
+        return f"Updated task '{task.title}', Boss."
 
-        # 2. UNIVERSAL WORD DOCUMENT GENERATION
-        if ("word" in text or "doc" in text or "leave letter" in text or "report" in text or "essay" in text) and ("write" in text or "draft" in text or "create" in text or "make" in text or "type" in text or "open" in text):
-            return True, cls.create_word_document(user_text, assistant_engine=assistant_engine)
+    @staticmethod
+    def delete_task(task_identifier: str, store: Optional[TaskStore] = None) -> str:
+        t_store = store or default_task_store
+        success = t_store.delete_task(task_identifier)
+        if not success:
+            return f"Task '{task_identifier}' was not found, Boss."
+        return f"Deleted task '{task_identifier}', Boss."
 
-        # 3. WHATSAPP MESSAGING
-        if "whatsapp" in text and ("send" in text or "message" in text or "text" in text):
-            message_match = re.search(r"'(.*?)'|\"(.*?)\"", user_text)
-            if message_match:
-                message_content = message_match.group(1) or message_match.group(2)
-            elif "saying" in text:
-                message_content = text.split("saying")[-1].strip()
-            else:
-                message_content = "Hello"
+    # --- Phase 11 Preference Tools ---
+    @staticmethod
+    def set_preference(key: str, value: Any, store: Optional[PreferenceStore] = None) -> str:
+        p_store = store or default_preference_store
+        clean_key = p_store.set_preference(key, value)
+        return f"Set preference '{clean_key}' to '{value}', Boss."
 
-            recipient = None
-            for name in cls.CONTACTS:
-                if name in text:
-                    recipient = name
-                    break
-            
-            if not recipient:
-                digits = re.findall(r'\d+', text)
-                recipient = digits[0] if digits else "unknown"
+    @staticmethod
+    def get_preference(key: str, store: Optional[PreferenceStore] = None) -> str:
+        p_store = store or default_preference_store
+        val = p_store.get_preference(key)
+        if val is None:
+            return f"No preference found for '{key}', Boss."
+        return f"Your preference for '{key}' is '{val}', Boss."
 
-            response = cls.send_whatsapp_message(recipient, message_content)
-            return True, response
+    # --- Phase 12 Reminder Tools ---
+    @staticmethod
+    def create_reminder(
+        title: Optional[str] = None,
+        scheduled_time: Optional[str] = None,
+        user_text: Optional[str] = None,
+        recurrence: str = "NONE",
+        store: Optional[ReminderStore] = None,
+        **kwargs,
+    ) -> str:
+        r_store = store or default_reminder_store
 
-        # 4. YOUTUBE AUTOMATION
-        if "play" in text and ("song" in text or "playlist" in text or "youtube" in text or "from" in text):
-            return True, cls.play_youtube_song(user_text)
+        # Resolve title from provided arguments
+        rem_title = title or user_text or kwargs.get("message") or "General Reminder"
 
-        # 5. AUDIO & VOLUME CONTROL
-        if "set volume to" in text or "volume to" in text:
-            numbers = re.findall(r'\d+', text)
-            if numbers:
-                val = int(numbers[0])
-                return True, cls.set_volume(val)
+        # Resolve scheduled time
+        rem_time = scheduled_time or kwargs.get("time")
+        if not rem_time:
+            from datetime import datetime, timedelta
+            # Fallback time: 15 minutes from now if time extraction was ambiguous
+            rem_time = (datetime.now() + timedelta(minutes=15)).isoformat()
 
-        if "mute audio" in text or "mute volume" in text or "mute" in text:
-            return True, cls.mute_audio(True)
+        rem = r_store.create_reminder(title=rem_title, scheduled_time=rem_time, recurrence=recurrence)
+        rec_str = f" (Recurrence: {rem.recurrence.value})" if rem.recurrence.value != "NONE" else ""
+        return f"Set reminder for '{rem.title}' at {rem.scheduled_time}{rec_str}, Boss."
 
-        if "unmute" in text or "unmute audio" in text:
-            return True, cls.mute_audio(False)
+    @staticmethod
+    def list_reminders(status: str = "PENDING", store: Optional[ReminderStore] = None) -> str:
+        r_store = store or default_reminder_store
+        reminders = r_store.list_reminders(status=status)
+        if not reminders:
+            return f"You have no {status.lower()} reminders, Boss."
 
-        # 6. SCREENSHOTS
-        if "screenshot" in text or "take a shot" in text:
-            return True, cls.take_screenshot()
+        items = [f"- [{r.id}] '{r.title}' scheduled for {r.scheduled_time}" for r in reminders]
+        return f"Your {status.lower()} reminders:\n" + "\n".join(items)
 
-        # 7. GENERIC APP LAUNCHING
-        if "open" in text or "launch" in text:
-            return True, cls.open_app(user_text)
+    @staticmethod
+    def cancel_reminder(identifier: str, store: Optional[ReminderStore] = None) -> str:
+        r_store = store or default_reminder_store
+        rem = r_store.cancel_reminder(identifier)
+        if not rem:
+            return f"Reminder '{identifier}' was not found or is already cancelled, Boss."
+        return f"Cancelled reminder '{rem.title}', Boss."
 
-        return False, None
+    @staticmethod
+    def delete_reminder(identifier: str, store: Optional[ReminderStore] = None) -> str:
+        r_store = store or default_reminder_store
+        success = r_store.delete_reminder(identifier)
+        if not success:
+            return f"Reminder '{identifier}' was not found, Boss."
+        return f"Deleted reminder '{identifier}', Boss."

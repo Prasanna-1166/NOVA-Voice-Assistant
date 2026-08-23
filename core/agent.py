@@ -33,7 +33,7 @@ class Agent(ABC):
         self.description = description
         self.capabilities = capabilities
         self.allowed_tools = allowed_tools
-        self.registry = registry or default_registry
+        self.registry = registry if registry is not None else default_registry
 
     def is_tool_allowed(self, tool_name: str) -> bool:
         """Checks if a tool is explicitly authorized for this agent."""
@@ -47,7 +47,7 @@ class Agent(ABC):
             return ToolResult(
                 success=False,
                 output=None,
-                error=f"PERMISSIONS_ERROR: Agent '{self.name}' is not authorized to execute tool '{tool_name}'.",
+                error=f"UNAUTHORIZED_TASK: Tool '{tool_name}' is not authorized for {self.name}.",
             )
 
         if not self.registry.exists(tool_name):

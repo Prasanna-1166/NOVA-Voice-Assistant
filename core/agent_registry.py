@@ -13,6 +13,14 @@ INTENT_TO_CAPABILITY_MAP: Dict[str, str] = {
     "mute_audio": "mute_control",
     "take_screenshot": "screenshot",
     "create_reminder": "reminder_scheduling",
+    # Task & Preference Productivity
+    "create_task": "task_management",
+    "list_tasks": "task_management",
+    "complete_task": "task_management",
+    "update_task": "task_management",
+    "delete_task": "task_management",
+    "set_preference": "preference_management",
+    "get_preference": "preference_management",
     # Software Engineering / Coding
     "code_generation": "code_generation",
     "code_explanation": "code_explanation",

@@ -2,6 +2,7 @@ import re
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
+from datetime import datetime, timedelta
 
 
 class InputSource(Enum):
@@ -27,10 +28,29 @@ class RoutingResult:
 
 class IntentRouter:
     """
-    Deterministic intent router for Phase 3.
+    Deterministic intent router for NOVA V2.
     Parses natural-language commands into structured TaskRequests.
     Does NOT execute tools or make LLM calls directly.
     """
+
+    def _parse_time(self, text: str) -> Optional[str]:
+        """Parses relative time expressions into ISO datetime strings."""
+        now = datetime.now()
+        
+        # Seconds, minutes, hours offset
+        match = re.search(r"in\s+(\d+)\s*(sec|second|min|minute|hr|hour)s?", text)
+        if match:
+            amount = int(match.group(1))
+            unit = match.group(2)
+            if unit.startswith("sec"):
+                delta = timedelta(seconds=amount)
+            elif unit.startswith("min"):
+                delta = timedelta(minutes=amount)
+            else:
+                delta = timedelta(hours=amount)
+            return (now + delta).isoformat()
+            
+        return None
 
     def route(self, user_input: str, source: InputSource = InputSource.TEXT) -> RoutingResult:
         clean_input = user_input.strip()
@@ -108,17 +128,137 @@ class IntentRouter:
                 ),
             )
 
-        # 5. Create Reminder
-        timer_match = re.search(r"remind\s+me\s+in\s+(\d+)\s*(sec|second|min|minute|hr|hour)s?\s*(?:to\s+)?(.+)", lowered)
-        if timer_match:
+        # 5. List Reminders (Check BEFORE List Tasks to prevent routing overlap)
+        if re.search(r"\b(show|list|get|view|display)\b.*\b(reminder|reminders)\b", lowered):
             return RoutingResult(
                 success=True,
                 task_request=TaskRequest(
-                    intent="create_reminder",
-                    parameters={"user_text": user_input},
+                    intent="list_reminders",
+                    parameters={"status": "PENDING"},
                     source=source,
                     original_input=user_input,
                 ),
             )
+
+        # 6. Cancel / Delete Reminder
+        if re.search(r"\b(cancel|delete|remove)\b.*\b(reminder|reminders)\b", lowered):
+            match = re.search(r"\b(cancel|delete|remove)\b\s+(?:my\s+)?(?:reminder\s+)?(.+)", lowered)
+            target = match.group(2).strip() if match else lowered
+            return RoutingResult(
+                success=True,
+                task_request=TaskRequest(
+                    intent="cancel_reminder",
+                    parameters={"identifier": target},
+                    source=source,
+                    original_input=user_input,
+                ),
+            )
+
+        # 7. Create Reminder
+        if "remind" in lowered or "reminder" in lowered:
+            time_iso = self._parse_time(lowered)
+            
+            # Extract title phrase after "to" if available
+            title_match = re.search(r"\bto\s+(.+)$", user_input, re.IGNORECASE)
+            title = title_match.group(1).strip() if title_match else user_input
+
+            return RoutingResult(
+                success=True,
+                task_request=TaskRequest(
+                    intent="create_reminder",
+                    parameters={
+                        "title": title,
+                        "scheduled_time": time_iso,
+                        "user_text": user_input,
+                    },
+                    source=source,
+                    original_input=user_input,
+                ),
+            )
+
+        # 8. Create Task
+        if re.search(r"\b(create|add|new)\b.*\btask\b", lowered):
+            match = re.search(r"\b(?:create|add|new)\s+(?:a\s+)?task\s+(?:to\s+)?(.+)", user_input, re.IGNORECASE)
+            title = match.group(1).strip() if match else user_input
+            return RoutingResult(
+                success=True,
+                task_request=TaskRequest(
+                    intent="create_task",
+                    parameters={"title": title},
+                    source=source,
+                    original_input=user_input,
+                ),
+            )
+
+        # 9. List Tasks
+        if re.search(r"\b(show|list|get|view|display)\b.*\b(task|tasks)\b", lowered):
+            return RoutingResult(
+                success=True,
+                task_request=TaskRequest(
+                    intent="list_tasks",
+                    parameters={"status": "PENDING"},
+                    source=source,
+                    original_input=user_input,
+                ),
+            )
+
+        # 10. Complete Task
+        if re.search(r"\b(complete|finish|done|mark)\b.*\btask\b", lowered):
+            match = re.search(r"\b(?:complete|finish|done|mark)\s+(?:the\s+)?(?:task\s+)?(.+)", user_input, re.IGNORECASE)
+            target = match.group(1).strip() if match else user_input
+            return RoutingResult(
+                success=True,
+                task_request=TaskRequest(
+                    intent="complete_task",
+                    parameters={"task_identifier": target},
+                    source=source,
+                    original_input=user_input,
+                ),
+            )
+
+        # 11. Delete Task
+        if re.search(r"\b(delete|remove)\b.*\btask\b", lowered):
+            match = re.search(r"\b(?:delete|remove)\s+(?:the\s+)?(?:task\s+)?(.+)", user_input, re.IGNORECASE)
+            target = match.group(1).strip() if match else user_input
+            return RoutingResult(
+                success=True,
+                task_request=TaskRequest(
+                    intent="delete_task",
+                    parameters={"task_identifier": target},
+                    source=source,
+                    original_input=user_input,
+                ),
+            )
+
+        # 12. Set Preference
+        if "set my preferred" in lowered or "set preference" in lowered:
+            match = re.search(r"set\s+(?:my\s+preferred\s+|preference\s+)([a-zA-Z0-9_\s]+)\s+to\s+(.+)", user_input, re.IGNORECASE)
+            if match:
+                key = match.group(1).strip().replace(" ", "_")
+                val = match.group(2).strip()
+                return RoutingResult(
+                    success=True,
+                    task_request=TaskRequest(
+                        intent="set_preference",
+                        parameters={"key": key, "value": val},
+                        source=source,
+                        original_input=user_input,
+                    ),
+                )
+
+        # 13. Get Preference
+        if "what is my preferred" in lowered or "get preference" in lowered:
+            match = re.search(r"(?:what\s+is\s+my\s+preferred|get\s+preference)\s+([a-zA-Z0-9_\s\?]+)", user_input, re.IGNORECASE)
+            if match:
+                key = match.group(1).replace("?", "").strip().replace(" ", "_")
+                return RoutingResult(
+                    success=True,
+                    task_request=TaskRequest(
+                        intent="get_preference",
+                        parameters={"key": key},
+                        source=source,
+                        original_input=user_input,
+                    ),
+                )
 
         return RoutingResult(success=False, error="UNSUPPORTED: Intent could not be routed deterministically.")

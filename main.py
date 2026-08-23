@@ -6,10 +6,11 @@ import threading
 import queue
 
 from core.assistant import NovaAssistant
-from core.tools import SystemTools
+from core.intent_router import InputSource
 from voice.stt import NovaSTT
 from voice.tts import NovaTTS
 from voice.wakeword import NovaWakeWord
+
 
 class NovaVoicePipeline:
     def __init__(self):
@@ -25,18 +26,22 @@ class NovaVoicePipeline:
 
     def boot(self):
         print("\n[*] Booting NOVA Core Subsystems...")
+        
+        # Verify Ollama connection with fallback warning
         if not self.assistant.initialize():
-            print("[✗] Error: Failed to connect to Ollama local engine.")
-            sys.exit(1)
-            
+            print("[⚠️ Warning]: Ollama service not detected at http://localhost:11434.")
+            print("[⚠️ Warning]: LLM reasoning fallback disabled. Deterministic tools & task memory remain ACTIVE.")
+        else:
+            print("[✓] Ollama Local LLM Connected.")
+
         print("[✓] All Subsystems Online and Ready.\n")
         
-        startup_msg = "SWEETY systems online Boss. Listening for Alexa or text input."
-        print(f"[🗣️ SWEETY]: {startup_msg}\n")
+        startup_msg = "NOVA systems online Boss. Listening for Alexa or text input."
+        print(f"[🗣️ NOVA]: {startup_msg}\n")
         self.tts.speak(startup_msg)
 
     def keyboard_listener(self):
-        """Runs in a background thread to capture typed user input anytime."""
+        """Background thread to capture typed user input in terminal."""
         while True:
             try:
                 text = input()
@@ -50,37 +55,27 @@ class NovaVoicePipeline:
         if not user_text or len(user_text.strip()) == 0:
             return
 
-        # Print command strictly when coming from STT voice input to avoid terminal duplication
         if source == "voice":
             print(f"\n[👤 User (Voice)]: {user_text}")
 
-        # Check for termination commands
+        # Termination commands
         if user_text.lower() in ["exit", "stop", "quit", "goodbye nova", "bye nova"]:
             self.tts.speak("Shutting down voice engine. Goodbye Boss.")
             print("\n[✓] NOVA Session Terminated Cleanly.")
             os._exit(0)
 
-        # 1. Check System Tools (Passing both TTS and Assistant Engine)
-        is_tool, tool_response = SystemTools.process_command(
-            user_text, 
-            tts_engine=self.tts, 
-            assistant_engine=self.assistant
-        )
-        if is_tool:
-            print(f"[🛠️ TOOL]: Executed system action.")
-            print(f"[🗣️ NOVA]: {tool_response}\n")
-            self.tts.speak(tool_response)
-        else:
-            # 2. Process via Ollama LLM
-            print("[🧠 NOVA]: Thinking...")
-            response_text = self.assistant.process_message(user_text)
-            print(f"[🗣️ NOVA]: {response_text}\n")
-            self.tts.speak(response_text)
+        input_src = InputSource.VOICE if source == "voice" else InputSource.TEXT
+
+        print("[🧠 NOVA]: Processing...")
+        response_text = self.assistant.process_turn(user_text, source=input_src)
+        
+        print(f"[🗣️ NOVA]: {response_text}\n")
+        self.tts.speak(response_text)
 
     def run_pipeline(self):
         self.boot()
 
-        # Start keyboard input thread in background
+        # Start keyboard listener thread
         kb_thread = threading.Thread(target=self.keyboard_listener, daemon=True)
         kb_thread.start()
 
@@ -91,13 +86,13 @@ class NovaVoicePipeline:
 
         try:
             while True:
-                # 1. Check if user typed anything in the terminal
+                # 1. Process keyboard inputs
                 if not self.input_queue.empty():
-                    source, text = self.input_queue.get()
-                    self.process_command(text, source=source)
+                    src, text = self.input_queue.get()
+                    self.process_command(text, source=src)
                     continue
 
-                # 2. Listen for Wake-Word ("Alexa") briefly
+                # 2. Check wake-word
                 if self.wakeword.check_wake_word_step():
                     self.tts.speak("Yes?")
                     audio_file = self.stt.record_audio(record_seconds=5)
@@ -107,11 +102,12 @@ class NovaVoicePipeline:
                         if user_text and user_text.strip():
                             self.process_command(user_text, source="voice")
 
-                time.sleep(0.05)  # Prevents high CPU usage
+                time.sleep(0.05)
 
         except KeyboardInterrupt:
             print("\n[!] Emergency Stop Triggered by User.")
             self.tts.speak("Shutting down Boss.")
+
 
 if __name__ == "__main__":
     pipeline = NovaVoicePipeline()

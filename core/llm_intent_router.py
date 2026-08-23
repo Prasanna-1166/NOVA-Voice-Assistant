@@ -17,24 +17,35 @@ System Productivity Tools:
 4. "take_screenshot" -> parameters: {}
 5. "create_reminder" -> parameters: {"user_text": "<string>"}
 
+Task & To-Do Management:
+6. "create_task" -> parameters: {"title": "<string>", "priority": "<LOW|MEDIUM|HIGH>"}
+7. "list_tasks" -> parameters: {"status": "<PENDING|COMPLETED>"}
+8. "complete_task" -> parameters: {"task_identifier": "<string>"}
+9. "update_task" -> parameters: {"task_identifier": "<string>", "title": "<string>", "priority": "<LOW|MEDIUM|HIGH>", "status": "<PENDING|COMPLETED>"}
+10. "delete_task" -> parameters: {"task_identifier": "<string>"}
+
+User Preferences:
+11. "set_preference" -> parameters: {"key": "<string>", "value": "<string|number|boolean>"}
+12. "get_preference" -> parameters: {"key": "<string>"}
+
 Software Engineering & Coding Tasks:
-6. "code_generation" -> parameters: {"query": "<string>"}
-7. "code_explanation" -> parameters: {"query": "<string>"}
-8. "debugging" -> parameters: {"query": "<string>"}
-9. "algorithm_help" -> parameters: {"query": "<string>"}
-10. "code_conversion" -> parameters: {"query": "<string>"}
-11. "programming_guidance" -> parameters: {"query": "<string>"}
+13. "code_generation" -> parameters: {"query": "<string>"}
+14. "code_explanation" -> parameters: {"query": "<string>"}
+15. "debugging" -> parameters: {"query": "<string>"}
+16. "algorithm_help" -> parameters: {"query": "<string>"}
+17. "code_conversion" -> parameters: {"query": "<string>"}
+18. "programming_guidance" -> parameters: {"query": "<string>"}
 
 Document Generation Capabilities:
-12. "report_generation" -> parameters: {"topic": "<string>"}
-13. "assignment_generation" -> parameters: {"topic": "<string>"}
-14. "note_generation" -> parameters: {"topic": "<string>"}
-15. "project_documentation" -> parameters: {"topic": "<string>"}
-16. "letter_generation" -> parameters: {"topic": "<string>"}
-17. "resume_generation" -> parameters: {"topic": "<string>"}
-18. "quiz_generation" -> parameters: {"topic": "<string>"}
-19. "readme_generation" -> parameters: {"topic": "<string>"}
-20. "document_generation" -> parameters: {"topic": "<string>"}
+19. "report_generation" -> parameters: {"topic": "<string>"}
+20. "assignment_generation" -> parameters: {"topic": "<string>"}
+21. "note_generation" -> parameters: {"topic": "<string>"}
+22. "project_documentation" -> parameters: {"topic": "<string>"}
+23. "letter_generation" -> parameters: {"topic": "<string>"}
+24. "resume_generation" -> parameters: {"topic": "<string>"}
+25. "quiz_generation" -> parameters: {"topic": "<string>"}
+26. "readme_generation" -> parameters: {"topic": "<string>"}
+27. "document_generation" -> parameters: {"topic": "<string>"}
 
 Rules:
 - Respond strictly with a single valid JSON object.
@@ -42,7 +53,7 @@ Rules:
 - If the request is a general non-technical/conversational question, return: {"intent": "unknown", "parameters": {}}
 
 Example Output:
-{"intent": "report_generation", "parameters": {"topic": "Artificial Intelligence in Healthcare"}}
+{"intent": "create_task", "parameters": {"title": "DSA assignment", "priority": "HIGH"}}
 """
 
 
@@ -92,6 +103,7 @@ class LLMIntentRouter:
         if intent not in non_tool_intents and not self.registry.exists(intent):
             return RoutingResult(success=False, error=f"REJECTED: Intent '{intent}' is not supported.")
 
+        # Parameter Validations
         if intent == "open_application":
             app_name = params.get("app_name")
             if not app_name or not isinstance(app_name, str):
@@ -106,6 +118,28 @@ class LLMIntentRouter:
         elif intent == "mute_audio":
             if not isinstance(params.get("mute"), bool):
                 return RoutingResult(success=False, error="INVALID_PARAMS: mute must be boolean.")
+
+        elif intent == "create_task":
+            title = params.get("title")
+            if not title or not isinstance(title, str) or not title.strip():
+                return RoutingResult(success=False, error="INVALID_PARAMS: title must be non-empty string.")
+
+        elif intent in ["complete_task", "delete_task"]:
+            ident = params.get("task_identifier")
+            if not ident or not isinstance(ident, str) or not ident.strip():
+                return RoutingResult(success=False, error="INVALID_PARAMS: task_identifier must be non-empty string.")
+
+        elif intent == "set_preference":
+            key = params.get("key")
+            if not key or not isinstance(key, str) or not key.strip():
+                return RoutingResult(success=False, error="INVALID_PARAMS: key must be non-empty string.")
+            if "value" not in params:
+                return RoutingResult(success=False, error="INVALID_PARAMS: preference value is required.")
+
+        elif intent == "get_preference":
+            key = params.get("key")
+            if not key or not isinstance(key, str) or not key.strip():
+                return RoutingResult(success=False, error="INVALID_PARAMS: key must be non-empty string.")
 
         elif intent in non_tool_intents:
             if "topic" in params:
