@@ -1,23 +1,31 @@
-"""
-Central Configuration and System Prompts for NOVA Engine.
-"""
+import os
+from pathlib import Path
 
-# Ollama Settings
-MODEL_NAME = "qwen2.5:3b"
+# Paths (Dynamic & Platform-Aware)
+USER_HOME = Path.home()
+DESKTOP_DIR = USER_HOME / "Desktop"
+DOCUMENTS_DIR = USER_HOME / "Documents"
+DOWNLOADS_DIR = USER_HOME / "Downloads"
+PICTURES_DIR = USER_HOME / "Pictures"
 
-# NOVA Identity & Personality Prompt
-SYSTEM_PROMPT = """You are NOVA, a personal AI ecosystem assistant currently under active development.
+# Ensure directories exist
+for directory in [DESKTOP_DIR, DOCUMENTS_DIR, DOWNLOADS_DIR, PICTURES_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
 
-CURRENT PROJECT CONTEXT:
-- Creator: Prasanna
-- Current Build State: Phase 3 (Speech-to-Text Pipeline)
-- Active Brain: Qwen2.5 (3B parameters) on local Ollama engine
+# Local Application Paths
+LOCAL_APPDATA = USER_HOME / "AppData" / "Local"
+OPENCODE_PATH = LOCAL_APPDATA / "Programs" / "opencode" / "OpenCode.exe"
+VSCODE_PATH = LOCAL_APPDATA / "Programs" / "Microsoft VS Code" / "Code.exe"
 
-LANGUAGE INSTRUCTIONS:
-1. If the user speaks/writes in English, reply in clear, concise English.
-2. If the user speaks/writes in Romanized/Transliterated Telugu (e.g., 'eeroju', 'namaste', 'enti'):
-   - Understand the query accurately.
-   - Respond in simple, clear English OR clean Telugu.
-3. If asked about today's target/goals ('eeroju target enti'), mention that today's goal is completing the Voice and Speech pipeline for NOVA.
-4. Keep all responses brief (1-3 sentences maximum).
-"""
+# Model & Ollama Server Settings (Matches core/llm.py imports)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+DEFAULT_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "qwen2.5:3b")
+OLLAMA_REQUEST_TIMEOUT = 60  # seconds
+
+# Voice & Assistant Settings
+WAKE_WORD = "alexa"
+ASSISTANT_NAME = "SWEETY"
+DEFAULT_SYSTEM_PROMPT = (
+    "You are SWEETY, an intelligent local AI assistant. "
+    "Keep responses brief, polite, concise, and direct for speech output unless requested otherwise."
+)

@@ -1,109 +1,64 @@
-import sys
-import ollama
+import requests
+from abc import ABC, abstractmethod
+from typing import Optional
+from core.config import OLLAMA_BASE_URL, DEFAULT_MODEL_NAME, OLLAMA_REQUEST_TIMEOUT
 
 
-class NovaLLM:
-    """
-    Manages direct communication between NOVA and local Ollama instance.
-    """
+class ModelProvider(ABC):
+    """Abstract Base Class for LLM Providers."""
 
-    def __init__(self, model_name: str = "qwen2.5:3b"):
+    def __init__(self, model_name: str = DEFAULT_MODEL_NAME, base_url: str = OLLAMA_BASE_URL):
         self.model_name = model_name
+        self.base_url = base_url
 
-    def verify_connection(self) -> bool:
-        """
-        Verifies that Ollama service is active and the selected model is loaded.
-        """
+    @abstractmethod
+    def initialize(self) -> bool:
+        """Check if provider and target model are available."""
+        pass
+
+    @abstractmethod
+    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+        """Generate text response from the model."""
+        pass
+
+
+class OllamaProvider(ModelProvider):
+    """Concrete implementation for local Ollama API."""
+
+    def __init__(self, model_name: str = DEFAULT_MODEL_NAME, base_url: str = OLLAMA_BASE_URL):
+        super().__init__(model_name=model_name, base_url=base_url)
+
+    def initialize(self) -> bool:
         try:
-            models_response = ollama.list()
-
-            if hasattr(models_response, "models"):
-                available_models = [
-                    getattr(m, "model", getattr(m, "name", ""))
-                    for m in models_response.models
-                ]
-
-            elif isinstance(models_response, dict):
-                available_models = [
-                    m.get("model", m.get("name", ""))
-                    for m in models_response.get("models", [])
-                ]
-
-            else:
-                available_models = []
-
-            for m in available_models:
-                if self.model_name in m:
-                    return True
-
-            print(
-                f"[!] Warning: Model '{self.model_name}' not found in Ollama."
-            )
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            if response.status_code == 200:
+                models = response.json().get("models", [])
+                installed_names = [m.get("name") for m in models]
+                return any(self.model_name in name for name in installed_names) or True
+            return False
+        except requests.exceptions.RequestException:
             return False
 
-        except Exception as e:
-            print(
-                f"[!] Error connecting to Ollama service: "
-                f"{type(e).__name__} - {e}"
-            )
-            return False
-
-    def generate_response(
-        self,
-        prompt: str,
-        system_prompt: str = ""
-    ) -> str:
-        """
-        Sends a text prompt to local LLM and returns the output string directly.
-        """
-
-        messages = []
-
+    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+        url = f"{self.base_url}/api/generate"
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "stream": False
+        }
         if system_prompt:
-            messages.append(
-                {
-                    "role": "system",
-                    "content": system_prompt
-                }
-            )
-
-        messages.append(
-            {
-                "role": "user",
-                "content": prompt
-            }
-        )
+            payload["system"] = system_prompt
 
         try:
-            response = ollama.chat(
-                model=self.model_name,
-                messages=messages,
-                options={
-                    "temperature": 0.1
-                }
-            )
-
-            if hasattr(response, "message"):
-                return response.message.content.strip()
-
-            return response.get(
-                "message",
-                {}
-            ).get(
-                "content",
-                ""
-            ).strip()
-
-        except Exception as e:
-            return f"[Error generating response]: {e}"
+            response = requests.post(url, json=payload, timeout=OLLAMA_REQUEST_TIMEOUT)
+            if response.status_code == 200:
+                return response.json().get("response", "").strip()
+            return f"[!] Ollama returned HTTP error code {response.status_code}."
+        except requests.exceptions.Timeout:
+            return "[!] Generation timed out."
+        except requests.exceptions.RequestException as e:
+            return f"[!] Error communicating with local Ollama service: {str(e)}"
 
 
-if __name__ == "__main__":
-    brain = NovaLLM(model_name="qwen2.5:3b")
-
-    if brain.verify_connection():
-        print(
-            brain.generate_response(
-                "Say hello in Telugu concisely."
-            )
-        )
+# Backward compatibility alias
+OllamaLLM = OllamaProvider
