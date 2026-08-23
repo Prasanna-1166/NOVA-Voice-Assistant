@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from core.tool_definition import Tool, ToolResult, RiskLevel
 from core.tool_registry import ToolRegistry, initialize_default_registry
 
@@ -50,7 +51,8 @@ class TestToolRegistry(unittest.TestCase):
         self.assertFalse(res.success)
         self.assertIn("Unknown tool", res.error)
 
-    def test_default_registry_initialization(self):
+    @patch("core.tools.SystemTools.open_app")
+    def test_default_registry_initialization(self, mock_open_app):
         registry = initialize_default_registry()
         tools = ["open_application", "set_volume", "mute_audio", "take_screenshot", "create_reminder"]
         for t in tools:
