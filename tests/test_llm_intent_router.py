@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from core.llm_intent_router import LLMIntentRouter
 from core.intent_router import InputSource
 from core.tool_registry import initialize_default_registry
@@ -41,7 +41,7 @@ class TestLLMIntentRouter(unittest.TestCase):
         self.mock_provider.generate.return_value = '{"intent": "delete_system_files", "parameters": {}}'
         res = self.router.route("Delete my system files")
         self.assertFalse(res.success)
-        self.assertIn("not registered", res.error)
+        self.assertIn("REJECTED", res.error)
 
     def test_invalid_parameter_rejection(self):
         """Rejects out-of-bounds parameters."""

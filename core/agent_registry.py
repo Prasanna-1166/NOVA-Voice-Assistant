@@ -2,15 +2,24 @@ from typing import Dict, List, Optional, Any
 from core.agent import Agent
 from core.intent_router import TaskRequest
 from core.productivity_agent import ProductivityAgent
+from core.coding_agent import CodingAgent
 
 
 # Centralized mapping between Tool Intents and Agent Capabilities
 INTENT_TO_CAPABILITY_MAP: Dict[str, str] = {
+    # System Productivity
     "open_application": "app_management",
     "set_volume": "volume_control",
     "mute_audio": "mute_control",
     "take_screenshot": "screenshot",
     "create_reminder": "reminder_scheduling",
+    # Software Engineering / Coding
+    "code_generation": "code_generation",
+    "code_explanation": "code_explanation",
+    "debugging": "debugging",
+    "algorithm_help": "algorithm_help",
+    "code_conversion": "code_conversion",
+    "programming_guidance": "programming_guidance",
 }
 
 
@@ -24,21 +33,17 @@ class AgentRegistry:
         self._agents: Dict[str, Agent] = {}
 
     def register(self, agent: Agent) -> None:
-        """Registers a new agent instance. Raises ValueError if agent name exists."""
         if agent.name in self._agents:
             raise ValueError(f"Agent '{agent.name}' is already registered.")
         self._agents[agent.name] = agent
 
     def get(self, name: str) -> Optional[Agent]:
-        """Retrieves an agent by name."""
         return self._agents.get(name)
 
     def exists(self, name: str) -> bool:
-        """Checks if an agent name is registered."""
         return name in self._agents
 
     def list_agents(self) -> List[Dict[str, Any]]:
-        """Lists metadata for all registered agents."""
         return [
             {
                 "name": a.name,
@@ -50,28 +55,22 @@ class AgentRegistry:
         ]
 
     def find_capable_agents(self, task_request: TaskRequest) -> List[Agent]:
-        """
-        Deterministically matches a TaskRequest's intent against agent capabilities
-        and allowed tools.
-        """
         intent = task_request.intent
         required_capability = INTENT_TO_CAPABILITY_MAP.get(intent)
 
         capable_agents: List[Agent] = []
         for agent in self._agents.values():
-            if agent.is_tool_allowed(intent):
-                if required_capability is None or required_capability in agent.capabilities:
-                    capable_agents.append(agent)
+            if agent.is_tool_allowed(intent) or (required_capability and required_capability in agent.capabilities):
+                capable_agents.append(agent)
 
         return capable_agents
 
 
 def initialize_default_agent_registry() -> AgentRegistry:
-    """Instantiates and registers the baseline Phase 6 agent registry."""
     registry = AgentRegistry()
     registry.register(ProductivityAgent())
+    registry.register(CodingAgent())
     return registry
 
 
-# Global instance reference for module-level access
 default_agent_registry = initialize_default_agent_registry()
