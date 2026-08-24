@@ -1,6 +1,6 @@
 import re
 from enum import Enum
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 
@@ -36,33 +36,55 @@ class IntentRouter:
     def _parse_time(self, text: str) -> Optional[str]:
         """Parses relative time expressions into ISO datetime strings."""
         now = datetime.now()
-        
+
         # Seconds, minutes, hours offset
-        match = re.search(r"in\s+(\d+)\s*(sec|second|min|minute|hr|hour)s?", text)
+        match = re.search(
+            r"in\s+(\d+)\s*(sec|second|min|minute|hr|hour)s?",
+            text
+        )
+
         if match:
             amount = int(match.group(1))
             unit = match.group(2)
+
             if unit.startswith("sec"):
                 delta = timedelta(seconds=amount)
             elif unit.startswith("min"):
                 delta = timedelta(minutes=amount)
             else:
                 delta = timedelta(hours=amount)
+
             return (now + delta).isoformat()
-            
+
         return None
 
-    def route(self, user_input: str, source: InputSource = InputSource.TEXT) -> RoutingResult:
+    def route(
+        self,
+        user_input: str,
+        source: InputSource = InputSource.TEXT
+    ) -> RoutingResult:
+
         clean_input = user_input.strip()
+
         if not clean_input:
-            return RoutingResult(success=False, error="Empty user input.")
+            return RoutingResult(
+                success=False,
+                error="Empty user input."
+            )
 
         lowered = clean_input.lower()
 
         # 1. Open Application
-        app_match = re.search(r"^open\s+([a-zA-Z0-9\s]+)", lowered)
-        if app_match and not any(k in lowered for k in ["word", "document", "file"]):
+        app_match = re.search(
+            r"^open\s+([a-zA-Z0-9\s]+)",
+            lowered
+        )
+
+        if app_match and not any(
+            k in lowered for k in ["word", "document", "file"]
+        ):
             app_name = app_match.group(1).strip()
+
             if app_name:
                 return RoutingResult(
                     success=True,
@@ -75,10 +97,15 @@ class IntentRouter:
                 )
 
         # 2. Set Volume
-        vol_match = re.search(r"(?:set|change)\s+volume\s+(?:to\s+)?(\d+)", lowered)
+        vol_match = re.search(
+            r"(?:set|change)\s+volume\s+(?:to\s+)?(\d+)",
+            lowered
+        )
+
         if vol_match:
             try:
                 level = int(vol_match.group(1))
+
                 if 0 <= level <= 100:
                     return RoutingResult(
                         success=True,
@@ -89,10 +116,17 @@ class IntentRouter:
                             original_input=user_input,
                         ),
                     )
-                else:
-                    return RoutingResult(success=False, error="Volume level out of bounds (0-100).")
+
+                return RoutingResult(
+                    success=False,
+                    error="Volume level out of bounds (0-100)."
+                )
+
             except ValueError:
-                return RoutingResult(success=False, error="Invalid volume parameter.")
+                return RoutingResult(
+                    success=False,
+                    error="Invalid volume parameter."
+                )
 
         # 3. Mute / Unmute
         if "unmute" in lowered:
@@ -105,6 +139,7 @@ class IntentRouter:
                     original_input=user_input,
                 ),
             )
+
         elif "mute" in lowered:
             return RoutingResult(
                 success=True,
@@ -128,8 +163,12 @@ class IntentRouter:
                 ),
             )
 
-        # 5. List Reminders (Check BEFORE List Tasks to prevent routing overlap)
-        if re.search(r"\b(show|list|get|view|display)\b.*\b(reminder|reminders)\b", lowered):
+        # 5. List Reminders
+        # Check BEFORE List Tasks to prevent routing overlap
+        if re.search(
+            r"\b(show|list|get|view|display)\b.*\b(reminder|reminders)\b",
+            lowered
+        ):
             return RoutingResult(
                 success=True,
                 task_request=TaskRequest(
@@ -141,9 +180,18 @@ class IntentRouter:
             )
 
         # 6. Cancel / Delete Reminder
-        if re.search(r"\b(cancel|delete|remove)\b.*\b(reminder|reminders)\b", lowered):
-            match = re.search(r"\b(cancel|delete|remove)\b\s+(?:my\s+)?(?:reminder\s+)?(.+)", lowered)
+        if re.search(
+            r"\b(cancel|delete|remove)\b.*\b(reminder|reminders)\b",
+            lowered
+        ):
+            match = re.search(
+                r"\b(cancel|delete|remove)\b\s+"
+                r"(?:my\s+)?(?:reminder\s+)?(.+)",
+                lowered
+            )
+
             target = match.group(2).strip() if match else lowered
+
             return RoutingResult(
                 success=True,
                 task_request=TaskRequest(
@@ -157,10 +205,19 @@ class IntentRouter:
         # 7. Create Reminder
         if "remind" in lowered or "reminder" in lowered:
             time_iso = self._parse_time(lowered)
-            
+
             # Extract title phrase after "to" if available
-            title_match = re.search(r"\bto\s+(.+)$", user_input, re.IGNORECASE)
-            title = title_match.group(1).strip() if title_match else user_input
+            title_match = re.search(
+                r"\bto\s+(.+)$",
+                user_input,
+                re.IGNORECASE
+            )
+
+            title = (
+                title_match.group(1).strip()
+                if title_match
+                else user_input
+            )
 
             return RoutingResult(
                 success=True,
@@ -177,9 +234,23 @@ class IntentRouter:
             )
 
         # 8. Create Task
-        if re.search(r"\b(create|add|new)\b.*\btask\b", lowered):
-            match = re.search(r"\b(?:create|add|new)\s+(?:a\s+)?task\s+(?:to\s+)?(.+)", user_input, re.IGNORECASE)
-            title = match.group(1).strip() if match else user_input
+        if re.search(
+            r"\b(create|add|new)\b.*\btask\b",
+            lowered
+        ):
+            match = re.search(
+                r"\b(?:create|add|new)\s+"
+                r"(?:a\s+)?task\s+(?:to\s+)?(.+)",
+                user_input,
+                re.IGNORECASE
+            )
+
+            title = (
+                match.group(1).strip()
+                if match
+                else user_input
+            )
+
             return RoutingResult(
                 success=True,
                 task_request=TaskRequest(
@@ -191,7 +262,10 @@ class IntentRouter:
             )
 
         # 9. List Tasks
-        if re.search(r"\b(show|list|get|view|display)\b.*\b(task|tasks)\b", lowered):
+        if re.search(
+            r"\b(show|list|get|view|display)\b.*\b(task|tasks)\b",
+            lowered
+        ):
             return RoutingResult(
                 success=True,
                 task_request=TaskRequest(
@@ -203,9 +277,23 @@ class IntentRouter:
             )
 
         # 10. Complete Task
-        if re.search(r"\b(complete|finish|done|mark)\b.*\btask\b", lowered):
-            match = re.search(r"\b(?:complete|finish|done|mark)\s+(?:the\s+)?(?:task\s+)?(.+)", user_input, re.IGNORECASE)
-            target = match.group(1).strip() if match else user_input
+        if re.search(
+            r"\b(complete|finish|done|mark)\b.*\btask\b",
+            lowered
+        ):
+            match = re.search(
+                r"\b(?:complete|finish|done|mark)\s+"
+                r"(?:the\s+)?(?:task\s+)?(.+)",
+                user_input,
+                re.IGNORECASE
+            )
+
+            target = (
+                match.group(1).strip()
+                if match
+                else user_input
+            )
+
             return RoutingResult(
                 success=True,
                 task_request=TaskRequest(
@@ -217,9 +305,23 @@ class IntentRouter:
             )
 
         # 11. Delete Task
-        if re.search(r"\b(delete|remove)\b.*\btask\b", lowered):
-            match = re.search(r"\b(?:delete|remove)\s+(?:the\s+)?(?:task\s+)?(.+)", user_input, re.IGNORECASE)
-            target = match.group(1).strip() if match else user_input
+        if re.search(
+            r"\b(delete|remove)\b.*\btask\b",
+            lowered
+        ):
+            match = re.search(
+                r"\b(?:delete|remove)\s+"
+                r"(?:the\s+)?(?:task\s+)?(.+)",
+                user_input,
+                re.IGNORECASE
+            )
+
+            target = (
+                match.group(1).strip()
+                if match
+                else user_input
+            )
+
             return RoutingResult(
                 success=True,
                 task_request=TaskRequest(
@@ -231,26 +333,54 @@ class IntentRouter:
             )
 
         # 12. Set Preference
-        if "set my preferred" in lowered or "set preference" in lowered:
-            match = re.search(r"set\s+(?:my\s+preferred\s+|preference\s+)([a-zA-Z0-9_\s]+)\s+to\s+(.+)", user_input, re.IGNORECASE)
+        if (
+            "set my preferred" in lowered
+            or "set preference" in lowered
+        ):
+            match = re.search(
+                r"set\s+(?:my\s+preferred\s+|preference\s+)"
+                r"([a-zA-Z0-9_\s]+)\s+to\s+(.+)",
+                user_input,
+                re.IGNORECASE
+            )
+
             if match:
                 key = match.group(1).strip().replace(" ", "_")
                 val = match.group(2).strip()
+
                 return RoutingResult(
                     success=True,
                     task_request=TaskRequest(
                         intent="set_preference",
-                        parameters={"key": key, "value": val},
+                        parameters={
+                            "key": key,
+                            "value": val
+                        },
                         source=source,
                         original_input=user_input,
                     ),
                 )
 
         # 13. Get Preference
-        if "what is my preferred" in lowered or "get preference" in lowered:
-            match = re.search(r"(?:what\s+is\s+my\s+preferred|get\s+preference)\s+([a-zA-Z0-9_\s\?]+)", user_input, re.IGNORECASE)
+        if (
+            "what is my preferred" in lowered
+            or "get preference" in lowered
+        ):
+            match = re.search(
+                r"(?:what\s+is\s+my\s+preferred|get\s+preference)\s+"
+                r"([a-zA-Z0-9_\s\?]+)",
+                user_input,
+                re.IGNORECASE
+            )
+
             if match:
-                key = match.group(1).replace("?", "").strip().replace(" ", "_")
+                key = (
+                    match.group(1)
+                    .replace("?", "")
+                    .strip()
+                    .replace(" ", "_")
+                )
+
                 return RoutingResult(
                     success=True,
                     task_request=TaskRequest(
@@ -261,4 +391,66 @@ class IntentRouter:
                     ),
                 )
 
-        return RoutingResult(success=False, error="UNSUPPORTED: Intent could not be routed deterministically.")
+        # 14. Document Ingestion
+        # Examples:
+        # "add document D:\notes.pdf"
+        # "ingest document notes.txt"
+        ingest_match = re.search(
+            r"\b(add|ingest|index|upload|import)\b.*"
+            r"\b(document|file|pdf|notes)\b\s+(.+)",
+            lowered
+        )
+
+        if ingest_match:
+            path_str = ingest_match.group(3).strip()
+
+            return RoutingResult(
+                success=True,
+                task_request=TaskRequest(
+                    intent="ingest_document",
+                    parameters={"file_path": path_str},
+                    source=source,
+                    original_input=user_input,
+                ),
+            )
+
+        # 15. Document Querying
+        # Examples:
+        # "according to my notes..."
+        # "what does my document say about..."
+        if re.search(
+            r"\b(according to my|in my notes|from my document|"
+            r"in my pdf|search my notes)\b",
+            lowered
+        ):
+            return RoutingResult(
+                success=True,
+                task_request=TaskRequest(
+                    intent="query_documents",
+                    parameters={"query": user_input},
+                    source=source,
+                    original_input=user_input,
+                ),
+            )
+
+        # 16. List Indexed Knowledge Documents
+        if re.search(
+            r"\b(list|show)\b.*\b(indexed|knowledge|rag)\b.*"
+            r"\b(documents|files|notes)\b",
+            lowered
+        ):
+            return RoutingResult(
+                success=True,
+                task_request=TaskRequest(
+                    intent="list_knowledge_documents",
+                    parameters={},
+                    source=source,
+                    original_input=user_input,
+                ),
+            )
+
+        # No supported intent found
+        return RoutingResult(
+            success=False,
+            error="UNSUPPORTED: Intent could not be routed deterministically."
+        )

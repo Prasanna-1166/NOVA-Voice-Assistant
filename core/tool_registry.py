@@ -194,7 +194,43 @@ def initialize_default_registry() -> ToolRegistry:
             parameters_schema={"type": "object", "properties": {"identifier": {"type": "string"}}, "required": ["identifier"]},
         )
     )
+    # Phase 13 RAG / Document Knowledge Tools
+    registry.register(
+        ToolDefinition(
+            name="ingest_document",
+            description="Ingests and indexes a local document (.txt, .md, .pdf, .docx) into the RAG vector store.",
+            func=SystemTools.ingest_document,
+            parameters_schema={
+                "type": "object",
+                "properties": {"file_path": {"type": "string"}},
+                "required": ["file_path"],
+            },
+        )
+    )
+
+    registry.register(
+        ToolDefinition(
+            name="query_documents",
+            description="Queries indexed local knowledge documents using RAG to answer questions.",
+            func=SystemTools.query_documents,
+            parameters_schema={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+        )
+    )
+
+    registry.register(
+        ToolDefinition(
+            name="list_knowledge_documents",
+            description="Lists all documents currently indexed in the local RAG vector store.",
+            func=SystemTools.list_knowledge_documents,
+            parameters_schema={"type": "object", "properties": {}},
+        )
+    )
 
     return registry
 
 default_registry = initialize_default_registry()
+  

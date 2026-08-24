@@ -1,4 +1,5 @@
 from typing import List, Optional
+
 from core.agent import Agent, AgentResult
 from core.intent_router import TaskRequest
 from core.tool_registry import ToolRegistry, default_registry
@@ -6,7 +7,9 @@ from core.tool_registry import ToolRegistry, default_registry
 
 class ProductivityAgent(Agent):
     """
-    Specialized Agent for system productivity automation, task management, user preferences, and reminders.
+    Specialized Agent for system productivity automation, task management,
+    user preferences, and reminders.
+
     Delegates all tool calls strictly through the ToolRegistry execution boundary.
     """
 
@@ -27,12 +30,18 @@ class ProductivityAgent(Agent):
         "delete_task",
         "set_preference",
         "get_preference",
+        "ingest_document",
+        "query_documents",
+        "list_knowledge_documents",
     ]
 
     def __init__(
         self,
         name: str = "ProductivityAgent",
-        description: str = "Specialized AI agent for OS-level productivity, desktop automation, task management, user preferences, and reminders.",
+        description: str = (
+            "Specialized AI agent for OS-level productivity, desktop "
+            "automation, task management, user preferences, and reminders."
+        ),
         registry: Optional[ToolRegistry] = None,
     ):
         super().__init__(
@@ -65,7 +74,10 @@ class ProductivityAgent(Agent):
                 success=False,
                 output=None,
                 agent_name=self.name,
-                error=f"UNAUTHORIZED_TASK: Tool '{intent}' is not authorized for {self.name}.",
+                error=(
+                    f"UNAUTHORIZED_TASK: Tool '{intent}' is not authorized "
+                    f"for {self.name}."
+                ),
             )
 
         if not self.registry.exists(intent):
@@ -73,10 +85,14 @@ class ProductivityAgent(Agent):
                 success=False,
                 output=None,
                 agent_name=self.name,
-                error=f"REGISTRY_ERROR: Tool '{intent}' is not registered in ToolRegistry.",
+                error=(
+                    f"REGISTRY_ERROR: Tool '{intent}' is not registered "
+                    "in ToolRegistry."
+                ),
             )
 
         tool_res = self.execute_tool(intent, **parameters)
+
         if tool_res.success:
             return AgentResult(
                 success=True,

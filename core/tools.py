@@ -178,3 +178,24 @@ class SystemTools:
         if not success:
             return f"Reminder '{identifier}' was not found, Boss."
         return f"Deleted reminder '{identifier}', Boss."
+    # --- Phase 13 RAG Tools ---
+    @staticmethod
+    def ingest_document(file_path: str, pipeline=None) -> str:
+        from rag.rag_pipeline import default_rag_pipeline
+        rag = pipeline or default_rag_pipeline
+        return rag.ingest_document(file_path)
+
+    @staticmethod
+    def query_documents(query: str, pipeline=None) -> str:
+        from rag.rag_pipeline import default_rag_pipeline
+        rag = pipeline or default_rag_pipeline
+        return rag.query(query)
+
+    @staticmethod
+    def list_knowledge_documents(pipeline=None) -> str:
+        from rag.rag_pipeline import default_rag_pipeline
+        rag = pipeline or default_rag_pipeline
+        docs = rag.list_documents()
+        if not docs:
+            return "Your local knowledge base is empty, Boss."
+        return "Indexed Knowledge Documents:\n" + "\n".join([f"- {d}" for d in docs])
