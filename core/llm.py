@@ -22,16 +22,17 @@ class OllamaProvider:
         for endpoint in ["/", "/api/tags"]:
             try:
                 req = urllib.request.Request(f"{self.base_url}{endpoint}", method="GET")
-                with urllib.request.urlopen(req, timeout=3) as resp:
+                with urllib.request.urlopen(req, timeout=5) as resp:
                     if resp.status == 200:
                         return True
             except Exception:
                 continue
         return False
 
-    def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+    def generate(self, prompt: str, system_prompt: Optional[str] = None, timeout: int = 120) -> str:
         """
         Sends generation payload to Ollama /api/generate endpoint.
+        Allows callers to pass custom timeouts (default: 120 seconds).
         """
         url = f"{self.base_url}/api/generate"
         payload = {
@@ -51,7 +52,7 @@ class OllamaProvider:
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 if resp.status == 200:
                     result = json.loads(resp.read().decode("utf-8"))
                     return result.get("response", "").strip()

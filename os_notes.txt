@@ -1,0 +1,1 @@
+Deadlock occurs when a set of processes are blocked because each process holds a resource and waits for another resource held by another process. The four necessary conditions for deadlock are mutual exclusion, hold and wait, no preemption, and circular wait.

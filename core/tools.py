@@ -138,15 +138,10 @@ class SystemTools:
         **kwargs,
     ) -> str:
         r_store = store or default_reminder_store
-
-        # Resolve title from provided arguments
         rem_title = title or user_text or kwargs.get("message") or "General Reminder"
-
-        # Resolve scheduled time
         rem_time = scheduled_time or kwargs.get("time")
         if not rem_time:
             from datetime import datetime, timedelta
-            # Fallback time: 15 minutes from now if time extraction was ambiguous
             rem_time = (datetime.now() + timedelta(minutes=15)).isoformat()
 
         rem = r_store.create_reminder(title=rem_title, scheduled_time=rem_time, recurrence=recurrence)
@@ -178,6 +173,7 @@ class SystemTools:
         if not success:
             return f"Reminder '{identifier}' was not found, Boss."
         return f"Deleted reminder '{identifier}', Boss."
+
     # --- Phase 13 RAG Tools ---
     @staticmethod
     def ingest_document(file_path: str, pipeline=None) -> str:
@@ -199,3 +195,10 @@ class SystemTools:
         if not docs:
             return "Your local knowledge base is empty, Boss."
         return "Indexed Knowledge Documents:\n" + "\n".join([f"- {d}" for d in docs])
+
+    @staticmethod
+    def remove_document(file_path: str = "", filename: str = "", pipeline=None) -> str:
+        from rag.rag_pipeline import default_rag_pipeline
+        rag = pipeline or default_rag_pipeline
+        target = file_path or filename
+        return rag.remove_document(target)

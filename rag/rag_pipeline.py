@@ -35,7 +35,8 @@ class RAGPipeline:
         return f"Successfully ingested '{doc.filename}' ({len(chunks)} chunks indexed), Boss."
 
     def query(self, question: str) -> str:
-        retrieved_chunks = self.retriever.retrieve(question, top_k=4)
+        # Retrieve top 2 most relevant chunks to keep inference lightweight and fast
+        retrieved_chunks = self.retriever.retrieve(question, top_k=2)
 
         if not retrieved_chunks:
             return "I couldn't find enough relevant information about that in your indexed documents, Boss."
@@ -60,8 +61,13 @@ class RAGPipeline:
             f"--- USER QUESTION ---\n{question}"
         )
 
-        llm_response = self.llm_provider.generate(prompt=prompt)
-        
+        # Pass 120-second timeout explicitly to prevent HTTP timeout errors
+        llm_response = self.llm_provider.generate(prompt=prompt, timeout=120)
+
+        # Handle LLM failure or timeout response gracefully
+        if not llm_response or llm_response.startswith("[!]"):
+            return f"Error executing grounded query, Boss: {llm_response}"
+
         sources_list = "\n".join([f"- {s}" for s in sorted(list(sources))])
         return f"{llm_response}\n\n**Sources:**\n{sources_list}"
 

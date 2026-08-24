@@ -164,7 +164,6 @@ class IntentRouter:
             )
 
         # 5. List Reminders
-        # Check BEFORE List Tasks to prevent routing overlap
         if re.search(
             r"\b(show|list|get|view|display)\b.*\b(reminder|reminders)\b",
             lowered
@@ -206,7 +205,6 @@ class IntentRouter:
         if "remind" in lowered or "reminder" in lowered:
             time_iso = self._parse_time(lowered)
 
-            # Extract title phrase after "to" if available
             title_match = re.search(
                 r"\bto\s+(.+)$",
                 user_input,
@@ -233,7 +231,25 @@ class IntentRouter:
                 ),
             )
 
-        # 8. Create Task
+        # 8. Document Removal (Check BEFORE Task Deletion to avoid conflict)
+        # Examples: "remove document os_notes.txt", "delete file os_notes.txt"
+        remove_doc_match = re.search(
+            r"\b(remove|delete)\b\s+(?:document|file|notes|pdf)\s+(.+)",
+            lowered
+        )
+        if remove_doc_match:
+            target_doc = remove_doc_match.group(2).strip()
+            return RoutingResult(
+                success=True,
+                task_request=TaskRequest(
+                    intent="remove_document",
+                    parameters={"file_path": target_doc},
+                    source=source,
+                    original_input=user_input,
+                ),
+            )
+
+        # 9. Create Task
         if re.search(
             r"\b(create|add|new)\b.*\btask\b",
             lowered
@@ -261,7 +277,7 @@ class IntentRouter:
                 ),
             )
 
-        # 9. List Tasks
+        # 10. List Tasks
         if re.search(
             r"\b(show|list|get|view|display)\b.*\b(task|tasks)\b",
             lowered
@@ -276,7 +292,7 @@ class IntentRouter:
                 ),
             )
 
-        # 10. Complete Task
+        # 11. Complete Task
         if re.search(
             r"\b(complete|finish|done|mark)\b.*\btask\b",
             lowered
@@ -304,7 +320,7 @@ class IntentRouter:
                 ),
             )
 
-        # 11. Delete Task
+        # 12. Delete Task
         if re.search(
             r"\b(delete|remove)\b.*\btask\b",
             lowered
@@ -332,7 +348,7 @@ class IntentRouter:
                 ),
             )
 
-        # 12. Set Preference
+        # 13. Set Preference
         if (
             "set my preferred" in lowered
             or "set preference" in lowered
@@ -361,7 +377,7 @@ class IntentRouter:
                     ),
                 )
 
-        # 13. Get Preference
+        # 14. Get Preference
         if (
             "what is my preferred" in lowered
             or "get preference" in lowered
@@ -391,10 +407,7 @@ class IntentRouter:
                     ),
                 )
 
-        # 14. Document Ingestion
-        # Examples:
-        # "add document D:\notes.pdf"
-        # "ingest document notes.txt"
+        # 15. Document Ingestion
         ingest_match = re.search(
             r"\b(add|ingest|index|upload|import)\b.*"
             r"\b(document|file|pdf|notes)\b\s+(.+)",
@@ -414,13 +427,9 @@ class IntentRouter:
                 ),
             )
 
-        # 15. Document Querying
-        # Examples:
-        # "according to my notes..."
-        # "what does my document say about..."
+        # 16. Document Querying (RAG Context Retrieval)
         if re.search(
-            r"\b(according to my|in my notes|from my document|"
-            r"in my pdf|search my notes)\b",
+            r"\b(according to my|in my notes|from my document|in my pdf|search my notes|what does my document say|what do my notes say|what does the document say)\b",
             lowered
         ):
             return RoutingResult(
@@ -433,7 +442,7 @@ class IntentRouter:
                 ),
             )
 
-        # 16. List Indexed Knowledge Documents
+        # 17. List Indexed Knowledge Documents
         if re.search(
             r"\b(list|show)\b.*\b(indexed|knowledge|rag)\b.*"
             r"\b(documents|files|notes)\b",
@@ -449,7 +458,6 @@ class IntentRouter:
                 ),
             )
 
-        # No supported intent found
         return RoutingResult(
             success=False,
             error="UNSUPPORTED: Intent could not be routed deterministically."

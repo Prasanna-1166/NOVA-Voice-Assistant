@@ -151,7 +151,7 @@ def initialize_default_registry() -> ToolRegistry:
         )
     )
 
-    # Phase 12 Reminder Tools (SINGLE REGISTRATION)
+    # Phase 12 Reminder Tools
     registry.register(
         ToolDefinition(
             name="create_reminder",
@@ -168,6 +168,7 @@ def initialize_default_registry() -> ToolRegistry:
             },
         )
     )
+
     registry.register(
         ToolDefinition(
             name="list_reminders",
@@ -194,6 +195,7 @@ def initialize_default_registry() -> ToolRegistry:
             parameters_schema={"type": "object", "properties": {"identifier": {"type": "string"}}, "required": ["identifier"]},
         )
     )
+
     # Phase 13 RAG / Document Knowledge Tools
     registry.register(
         ToolDefinition(
@@ -230,7 +232,20 @@ def initialize_default_registry() -> ToolRegistry:
         )
     )
 
+    registry.register(
+        ToolDefinition(
+            name="remove_document",
+            description="Removes a document from the local RAG vector store.",
+            func=SystemTools.remove_document,
+            parameters_schema={
+                "type": "object",
+                "properties": {"file_path": {"type": "string"}},
+                "required": ["file_path"],
+            },
+        )
+    )
+
     return registry
 
+
 default_registry = initialize_default_registry()
-  

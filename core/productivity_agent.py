@@ -8,7 +8,7 @@ from core.tool_registry import ToolRegistry, default_registry
 class ProductivityAgent(Agent):
     """
     Specialized Agent for system productivity automation, task management,
-    user preferences, and reminders.
+    user preferences, reminders, and RAG document knowledge.
 
     Delegates all tool calls strictly through the ToolRegistry execution boundary.
     """
@@ -33,6 +33,7 @@ class ProductivityAgent(Agent):
         "ingest_document",
         "query_documents",
         "list_knowledge_documents",
+        "remove_document",
     ]
 
     def __init__(
@@ -40,7 +41,7 @@ class ProductivityAgent(Agent):
         name: str = "ProductivityAgent",
         description: str = (
             "Specialized AI agent for OS-level productivity, desktop "
-            "automation, task management, user preferences, and reminders."
+            "automation, task management, user preferences, reminders, and RAG document knowledge."
         ),
         registry: Optional[ToolRegistry] = None,
     ):
@@ -60,6 +61,10 @@ class ProductivityAgent(Agent):
                 "task_management",
                 "todo_management",
                 "preference_management",
+                "ingest_document",
+                "query_documents",
+                "list_knowledge_documents",
+                "remove_document",
             ],
             allowed_tools=self.DEFAULT_ALLOWED_TOOLS,
             registry=registry or default_registry,
