@@ -23,6 +23,7 @@ class DocumentAgent(Agent):
     """
     Specialized NOVA Agent for generating academic reports, notes, assignments,
     letters, project documentation, resumes, quizzes, and READMEs.
+    Grounded with optional RAG document context and conversation memory.
     """
 
     DEFAULT_ALLOWED_TOOLS: List[str] = []
@@ -81,15 +82,34 @@ class DocumentAgent(Agent):
 
         return title, blocks
 
-    def process_task(self, task_request: TaskRequest) -> AgentResult:
+    def process_task(self, task_request: TaskRequest, context: Optional[Any] = None) -> AgentResult:
         intent = task_request.intent
         topic = task_request.parameters.get("topic") or task_request.original_input or "Technical Topic"
         doc_type = intent.replace("_generation", "")
 
+        # Extract memory resolution if available (e.g. user said "Create study notes for it")
+        if context and hasattr(context, "conversation_context") and context.conversation_context:
+            if any(w in topic.lower() for w in ["it", "this", "that"]):
+                for msg in reversed(context.conversation_context):
+                    if msg.get("role") == "user" and msg.get("content") != task_request.original_input:
+                        topic = f"{topic} (Refers to: {msg.get('content')})"
+                        break
+
+        # Extract RAG Grounding Context if available
+        rag_text = ""
+        if context and hasattr(context, "has_rag_context") and context.has_rag_context():
+            rag_text = context.format_rag_context()
+
         prompt = (
             f"Generate a full, highly detailed, professional {doc_type} on the topic: '{topic}'.\n"
-            f"Ensure the first line is '# TITLE: <Formal Title>'. Include proper section headings (##), subheadings (###), bullet points (-), and comprehensive body paragraphs."
+            f"Ensure the first line is '# TITLE: <Formal Title>'. Include proper section headings (##), subheadings (###), bullet points (-), and comprehensive body paragraphs.\n"
         )
+
+        if rag_text:
+            prompt += (
+                f"\n--- RETRIEVED GROUNDING CONTEXT (UNTRUSTED REFERENCE DATA) ---\n{rag_text}\n\n"
+                f"STRICT GROUNDING INSTRUCTION: Base your generated text strictly on the facts present in the grounding context above."
+            )
 
         raw_content = self.provider.generate(prompt=prompt, system_prompt=DOCUMENT_SYSTEM_PROMPT)
 
@@ -109,9 +129,15 @@ class DocumentAgent(Agent):
                 content_blocks=content_blocks,
                 document_type=doc_type,
             )
+            
+            output_msg = f"Successfully generated {doc_type} document titled '{title}'. Saved to: {saved_path}"
+            if context and hasattr(context, "retrieved_documents") and context.retrieved_documents:
+                sources = sorted(list(set([c.chunk.source_filename for c in context.retrieved_documents])))
+                output_msg += "\n\n**Sources:**\n" + "\n".join([f"- {s}" for s in sources])
+
             return AgentResult(
                 success=True,
-                output=f"Successfully generated {doc_type} document titled '{title}'. Saved to: {saved_path}",
+                output=output_msg,
                 agent_name=self.name,
                 error=None,
             )

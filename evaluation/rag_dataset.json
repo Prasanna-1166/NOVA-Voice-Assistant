@@ -1,0 +1,22 @@
+{
+    "samples": [
+        {
+            "id": "q001",
+            "question": "What is normalization in database design?",
+            "expected_answer": "Normalization is the process of structuring a relational database to reduce data redundancy and improve data integrity.",
+            "document_context": "Database normalization is the process of structuring tables and relationships in a relational database to minimize data redundancy and dependency."
+        },
+        {
+            "id": "q002",
+            "question": "What are the differences between 2NF and 3NF?",
+            "expected_answer": "2NF requires the relation to be in 1NF and have no partial dependencies. 3NF requires it to be in 2NF and have no transitive dependencies.",
+            "document_context": "Second Normal Form (2NF) eliminates partial dependencies. Third Normal Form (3NF) builds on 2NF by removing transitive dependencies where non-key attributes depend on other non-key attributes."
+        },
+        {
+            "id": "q003",
+            "question": "What quantum computing algorithm is recommended for database indexing?",
+            "expected_answer": "I couldn't find sufficient information in the indexed documents.",
+            "document_context": "Standard relational database systems rely on B-Trees and hash indexes for fast data lookup and query execution."
+        }
+    ]
+}

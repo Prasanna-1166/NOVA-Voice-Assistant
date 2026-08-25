@@ -5,6 +5,7 @@ from core.llm_intent_router import LLMIntentRouter
 from core.manager_agent import ManagerAgent
 from memory.conversation_memory import ConversationMemory
 from scheduling.scheduler import NOVAScheduler, default_scheduler
+from context.context_policy import ContextPolicy
 
 
 class NovaAssistant:
@@ -66,25 +67,41 @@ class NovaAssistant:
         routing_result: RoutingResult = self.llm_router.route(user_input, source=source)
 
         if routing_result.success and routing_result.task_request:
-            # 3a. Delegate structured intent through ManagerAgent
-            mgr_res = self.manager_agent.process_task(routing_result.task_request)
+            # 3a. Delegate structured intent through ManagerAgent with session_id for ContextManager
+            mgr_res = self.manager_agent.process_task(
+                routing_result.task_request, 
+                session_id=session_id
+            )
             if mgr_res.success:
                 response = str(mgr_res.output)
             else:
                 response = f"I couldn't complete that request, Boss: {mgr_res.error}"
         else:
-            # 3b. Conversational fallback with sliding memory context
+            # 3b. Conversational fallback with sliding memory context & RAG context check
+            ctx_request = ContextPolicy.evaluate(
+                intent="conversational", 
+                query=user_input, 
+                session_id=session_id
+            )
+            ctx_bundle = self.manager_agent.context_manager.build_context(ctx_request)
+
             history_context = self.memory.get_formatted_context(session_id=session_id)
+            rag_context = ctx_bundle.format_rag_context() if ctx_bundle.has_rag_context() else ""
+
             system_prompt = (
                 f"You are NOVA, a helpful offline multi-agent AI assistant for engineering students.\n\n"
                 f"Recent Conversation History:\n{history_context}"
             )
 
-            response = self.provider.generate(prompt=user_input, system_prompt=system_prompt)
+            prompt = user_input
+            if rag_context:
+                prompt += f"\n\n--- RETRIEVED GROUNDING CONTEXT ---\n{rag_context}"
+
+            response = self.provider.generate(prompt=prompt, system_prompt=system_prompt)
             if not response or response.startswith("[!]"):
                 response = "I encountered an issue processing that query, Boss."
 
-        # Handle TTS engine invocation for VOICE input when provided in pipeline test
+        # Handle TTS engine invocation for VOICE input when provided
         if source == InputSource.VOICE and tts_engine is not None and hasattr(tts_engine, "speak"):
             tts_engine.speak(response)
 

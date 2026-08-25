@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from core.agent import Agent, AgentResult
 from core.intent_router import TaskRequest
@@ -70,7 +70,11 @@ class ProductivityAgent(Agent):
             registry=registry or default_registry,
         )
 
-    def process_task(self, task_request: TaskRequest) -> AgentResult:
+    def process_task(
+        self, 
+        task_request: TaskRequest, 
+        context: Optional[Any] = None
+    ) -> AgentResult:
         intent = task_request.intent
         parameters = task_request.parameters or {}
 

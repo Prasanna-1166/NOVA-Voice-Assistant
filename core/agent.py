@@ -60,6 +60,10 @@ class Agent(ABC):
         return self.registry.execute(tool_name, **kwargs)
 
     @abstractmethod
-    def process_task(self, task_request: TaskRequest) -> AgentResult:
-        """Processes a structured TaskRequest and returns an AgentResult."""
+    def process_task(
+        self, 
+        task_request: TaskRequest, 
+        context: Optional[Any] = None
+    ) -> AgentResult:
+        """Processes a structured TaskRequest with optional context bundle and returns an AgentResult."""
         pass

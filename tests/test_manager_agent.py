@@ -85,7 +85,12 @@ class TestManagerAgent(unittest.TestCase):
         self.assertTrue(res.success)
         self.assertEqual(res.selected_agent, "MockAgent")
         self.assertEqual(res.output, "Mock Execution OK")
-        mock_agent.process_task.assert_called_once_with(task)
+        
+        # Verify call was delegated with both task request and context bundle
+        mock_agent.process_task.assert_called_once()
+        called_args, called_kwargs = mock_agent.process_task.call_args
+        self.assertEqual(called_args[0], task)
+        self.assertIn("context", called_kwargs)
 
 
 if __name__ == "__main__":
