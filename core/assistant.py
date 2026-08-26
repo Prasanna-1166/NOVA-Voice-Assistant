@@ -7,12 +7,16 @@ from memory.conversation_memory import ConversationMemory
 from scheduling.scheduler import NOVAScheduler, default_scheduler
 from context.context_policy import ContextPolicy
 
+# Phase 16 Multi-Step Agentic Planning Imports
+from core.planning.planner import AgenticPlanner
+from core.planning.plan_executor import PlanExecutor
+
 
 class NovaAssistant:
     """
     Main orchestrator for NOVA V2.
-    Processes user queries, routes structured intents, delegates to multi-agent manager,
-    maintains conversation context, and manages background scheduler lifecycle.
+    Processes user queries, routes structured intents or multi-step agentic plans,
+    delegates to multi-agent manager, maintains conversation context, and manages background scheduler.
     """
 
     def __init__(
@@ -22,12 +26,18 @@ class NovaAssistant:
         manager_agent: Optional[ManagerAgent] = None,
         memory: Optional[ConversationMemory] = None,
         scheduler: Optional[NOVAScheduler] = None,
+        planner: Optional[AgenticPlanner] = None,
+        plan_executor: Optional[PlanExecutor] = None,
     ):
         self.provider = provider or OllamaProvider()
         self.llm_router = llm_router or LLMIntentRouter(provider=self.provider)
         self.manager_agent = manager_agent or ManagerAgent()
         self.memory = memory or ConversationMemory()
         self.scheduler = scheduler or default_scheduler
+
+        # Phase 16 Subsystems
+        self.planner = planner or AgenticPlanner(provider=self.provider)
+        self.plan_executor = plan_executor or PlanExecutor(manager_agent=self.manager_agent)
 
     def initialize(self) -> bool:
         """Verifies health of the underlying LLM provider and boots background scheduler."""
@@ -53,8 +63,8 @@ class NovaAssistant:
         """
         Executes a complete interaction turn:
         1. Records user message in conversation memory
-        2. Routes input to structured intent or LLM router
-        3. Executes intent via ManagerAgent OR falls back to conversational LLM
+        2. Evaluates for Phase 16 multi-step agentic request vs single-intent routing
+        3. Executes structured intent/plan via ManagerAgent OR falls back to conversational LLM
         4. Records assistant response in conversation memory
         """
         if not user_input or not user_input.strip():
@@ -63,11 +73,24 @@ class NovaAssistant:
         # 1. Record user turn
         self.memory.add_user_message(session_id=session_id, content=user_input)
 
-        # 2. Intent Routing
+        # 2a. Phase 16 Multi-Step Agentic Planning Check
+        if self.planner.is_multi_step_request(user_input):
+            plan = self.planner.create_plan(user_input)
+            if plan.steps:
+                executed_plan = self.plan_executor.execute_plan(plan, session_id=session_id)
+                response = self.plan_executor.format_summary(executed_plan)
+
+                if source == InputSource.VOICE and tts_engine is not None and hasattr(tts_engine, "speak"):
+                    tts_engine.speak(response)
+
+                self.memory.add_assistant_message(session_id=session_id, content=response)
+                return response
+
+        # 2b. Standard Single Intent Routing
         routing_result: RoutingResult = self.llm_router.route(user_input, source=source)
 
         if routing_result.success and routing_result.task_request:
-            # 3a. Delegate structured intent through ManagerAgent with session_id for ContextManager
+            # 3a. Delegate single intent through ManagerAgent
             mgr_res = self.manager_agent.process_task(
                 routing_result.task_request, 
                 session_id=session_id

@@ -50,20 +50,60 @@ class NOVAScheduler:
     def check_pending_reminders(self) -> None:
         """Inspects store for due reminders and delivers notifications."""
         now = datetime.now()
-        pending = self.store.list_reminders(status=ReminderStatus.PENDING.value)
+        
+        # Safely fetch pending reminders using string value or Enum
+        status_val = (
+            ReminderStatus.PENDING.value 
+            if hasattr(ReminderStatus.PENDING, "value") 
+            else ReminderStatus.PENDING
+        )
+        pending = self.store.list_reminders(status=status_val)
 
         for reminder in pending:
             try:
-                scheduled_dt = datetime.fromisoformat(reminder.scheduled_time)
+                raw_time = getattr(reminder, "scheduled_time", None)
+                if not raw_time:
+                    continue
+
+                # Standardize ISO parsing (handles 'Z' suffix if present)
+                if isinstance(raw_time, str):
+                    clean_time = raw_time.replace("Z", "+00:00")
+                    scheduled_dt = datetime.fromisoformat(clean_time)
+                elif isinstance(raw_time, datetime):
+                    scheduled_dt = raw_time
+                else:
+                    continue
+
+                # Remove timezone awareness for uniform naive comparison if necessary
+                if scheduled_dt.tzinfo is not None:
+                    scheduled_dt = scheduled_dt.replace(tzinfo=None)
+
                 if scheduled_dt <= now:
-                    # Deliver notification
+                    title_text = getattr(reminder, "title", "NOVA Reminder")
+                    msg_text = getattr(reminder, "user_text", title_text)
+                    reminder_id = getattr(reminder, "id", None)
+
+                    # 1. Deliver notification
                     self.notification_service.notify(
                         title="NOVA Reminder",
-                        message=reminder.title,
+                        message=title_text or msg_text,
                     )
-                    # Mark triggered/recalculate recurrence in store
-                    self.store.mark_triggered(reminder.id)
+
+                    # 2. Mark triggered in store immediately to break duplicate notification loops
+                    if reminder_id:
+                        if hasattr(self.store, "mark_triggered"):
+                            self.store.mark_triggered(reminder_id)
+                        elif hasattr(self.store, "update_reminder_status"):
+                            self.store.update_reminder_status(reminder_id, "TRIGGERED")
             except Exception:
+                # If an error occurs during parsing or delivery for a specific reminder,
+                # mark it as triggered or handled to avoid crashing the scheduler loop continuously.
+                try:
+                    r_id = getattr(reminder, "id", None)
+                    if r_id and hasattr(self.store, "mark_triggered"):
+                        self.store.mark_triggered(r_id)
+                except Exception:
+                    pass
                 continue
 
 

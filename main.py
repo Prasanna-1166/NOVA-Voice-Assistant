@@ -7,22 +7,46 @@ import queue
 
 from core.assistant import NovaAssistant
 from core.intent_router import InputSource
-from voice.stt import NovaSTT
-from voice.tts import NovaTTS
-from voice.wakeword import NovaWakeWord
+
+
+class DummyTTS:
+    """Fallback TTS engine when TTS initialization fails."""
+    def speak(self, text: str):
+        pass
 
 
 class NovaVoicePipeline:
     def __init__(self):
         print("==========================================")
-        print("          NOVA Voice Assistant            ")
+        print("          NOVA Voice & Text Assistant     ")
         print("==========================================")
         
         self.assistant = NovaAssistant()
-        self.stt = NovaSTT(model_size="tiny.en")
-        self.tts = NovaTTS(voice="en-GB-SoniaNeural")
-        self.wakeword = NovaWakeWord(target_model="alexa", threshold=0.5)
         self.input_queue = queue.Queue()
+
+        # 1. Independent TTS Setup (Spoken Output)
+        try:
+            from voice.tts import NovaTTS
+            self.tts = NovaTTS(voice="en-GB-SoniaNeural")
+            self.tts_enabled = True
+            print("[✓] TTS Voice Engine Active (Output Ready).")
+        except Exception as e:
+            print(f"[⚠️ Warning]: TTS Output engine failed ({e}). Falling back to Silent Mode.")
+            self.tts = DummyTTS()
+            self.tts_enabled = False
+
+        # 2. Independent Wake Word & STT Setup (Mic Input)
+        try:
+            from voice.stt import NovaSTT
+            from voice.wakeword import NovaWakeWord
+            self.stt = NovaSTT(model_size="tiny.en")
+            self.wakeword = NovaWakeWord(target_model="alexa", threshold=0.5)
+            self.mic_enabled = True
+            print("[✓] Microphone & Wake Word Active (Input Ready).")
+        except Exception as e:
+            print(f"[⚠️ Warning]: Wake word / STT disabled due to DLL restriction: {e}")
+            print("[ℹ️ Info]: Keyboard Input Mode Active.")
+            self.mic_enabled = False
 
     def boot(self):
         print("\n[*] Booting NOVA Core Subsystems...")
@@ -36,9 +60,10 @@ class NovaVoicePipeline:
 
         print("[✓] All Subsystems Online and Ready.\n")
         
-        startup_msg = "NOVA systems online Boss. Listening for Alexa or text input."
+        startup_msg = "NOVA systems online Boss. Ready for multi-step agent requests."
         print(f"[🗣️ NOVA]: {startup_msg}\n")
-        self.tts.speak(startup_msg)
+        if self.tts_enabled:
+            self.tts.speak(startup_msg)
 
     def keyboard_listener(self):
         """Background thread to capture typed user input in terminal."""
@@ -60,7 +85,8 @@ class NovaVoicePipeline:
 
         # Termination commands
         if user_text.lower() in ["exit", "stop", "quit", "goodbye nova", "bye nova"]:
-            self.tts.speak("Shutting down voice engine. Goodbye Boss.")
+            if self.tts_enabled:
+                self.tts.speak("Shutting down engine. Goodbye Boss.")
             print("\n[✓] NOVA Session Terminated Cleanly.")
             os._exit(0)
 
@@ -70,7 +96,8 @@ class NovaVoicePipeline:
         response_text = self.assistant.process_turn(user_text, source=input_src)
         
         print(f"[🗣️ NOVA]: {response_text}\n")
-        self.tts.speak(response_text)
+        if self.tts_enabled:
+            self.tts.speak(response_text)
 
     def run_pipeline(self):
         self.boot()
@@ -80,7 +107,11 @@ class NovaVoicePipeline:
         kb_thread.start()
 
         print("-----------------------------------------------------------")
-        print(" [🎙️ VOICE]: Say 'ALEXA' to speak.")
+        if self.mic_enabled:
+            print(" [🎙️ VOICE]: Say 'ALEXA' to speak.")
+        else:
+            print(" [🎙️ VOICE]: Microphone Disabled (DLL Blocked)")
+        print(" [🔊 AUDIO]: Voice Output ACTIVE")
         print(" [⌨️ TEXT]: Type any command in this console and press Enter.")
         print("-----------------------------------------------------------\n")
 
@@ -92,21 +123,24 @@ class NovaVoicePipeline:
                     self.process_command(text, source=src)
                     continue
 
-                # 2. Check wake-word
-                if self.wakeword.check_wake_word_step():
-                    self.tts.speak("Yes?")
-                    audio_file = self.stt.record_audio(record_seconds=5)
-                    
-                    if audio_file:
-                        user_text = self.stt.transcribe(audio_file, language="en")
-                        if user_text and user_text.strip():
-                            self.process_command(user_text, source="voice")
+                # 2. Check wake-word (only if mic/wakeword is enabled)
+                if self.mic_enabled and hasattr(self, 'wakeword'):
+                    if self.wakeword.check_wake_word_step():
+                        if self.tts_enabled:
+                            self.tts.speak("Yes?")
+                        audio_file = self.stt.record_audio(record_seconds=5)
+                        
+                        if audio_file:
+                            user_text = self.stt.transcribe(audio_file, language="en")
+                            if user_text and user_text.strip():
+                                self.process_command(user_text, source="voice")
 
                 time.sleep(0.05)
 
         except KeyboardInterrupt:
             print("\n[!] Emergency Stop Triggered by User.")
-            self.tts.speak("Shutting down Boss.")
+            if self.tts_enabled:
+                self.tts.speak("Shutting down Boss.")
 
 
 if __name__ == "__main__":

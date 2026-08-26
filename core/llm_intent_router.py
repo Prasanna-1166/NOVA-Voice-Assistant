@@ -103,7 +103,7 @@ class LLMIntentRouter:
         if intent not in non_tool_intents and not self.registry.exists(intent):
             return RoutingResult(success=False, error=f"REJECTED: Intent '{intent}' is not supported.")
 
-        # Parameter Validations
+        # Parameter Validations & Normalizations
         if intent == "open_application":
             app_name = params.get("app_name")
             if not app_name or not isinstance(app_name, str):
@@ -130,16 +130,18 @@ class LLMIntentRouter:
                 return RoutingResult(success=False, error="INVALID_PARAMS: task_identifier must be non-empty string.")
 
         elif intent == "set_preference":
-            key = params.get("key")
-            if not key or not isinstance(key, str) or not key.strip():
-                return RoutingResult(success=False, error="INVALID_PARAMS: key must be non-empty string.")
-            if "value" not in params:
-                return RoutingResult(success=False, error="INVALID_PARAMS: preference value is required.")
+            # Extract key/value flexibly from LLM outputs
+            key = params.get("key") or params.get("preference_key") or params.get("preference")
+            val = params.get("value") or params.get("preference_value") or params.get("val")
+            if not key or val is None:
+                return RoutingResult(success=False, error="INVALID_PARAMS: key and value are required for set_preference.")
+            params = {"key": str(key).strip(), "value": str(val).strip()}
 
         elif intent == "get_preference":
-            key = params.get("key")
+            key = params.get("key") or params.get("preference_key") or params.get("preference")
             if not key or not isinstance(key, str) or not key.strip():
                 return RoutingResult(success=False, error="INVALID_PARAMS: key must be non-empty string.")
+            params = {"key": key.strip()}
 
         elif intent in non_tool_intents:
             if "topic" in params:
